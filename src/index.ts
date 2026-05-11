@@ -1,9 +1,6 @@
 import { Hono } from 'hono'
-
+import authRouter from './routes/auth';
 const app = new Hono()
-app.use()
-app.get('/', (c) => {
-  return c.text('Hello Hono!')
-})
+app.route("/", authRouter)
 
 export default app
