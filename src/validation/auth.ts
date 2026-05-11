@@ -26,4 +26,4 @@ const loginSchema = z.object({
     identifier: z.string().min(1,"identifier is required")  ,
     password: z.string().min(1,"password is required")
 })
-export {clientSignupSchema,baseSchema as deliverySignupSchema,loginSchema}
+export {clientSignupSchema ,loginSchema}
