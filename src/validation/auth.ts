@@ -9,11 +9,11 @@ const baseSchema = z.object({
     confirmPassword: z.string().min(1,"confirm password is required"),
     email: z.email("invalid email address"),
     phoneNumber: z.string().min(1, 'phone number is required').regex(/^01[0125][0-9]{8}$/, 'Invalid phone number')
-}).refine((data) => data.password === data.confirmPassword, {
+})
+const refinedBaseSchema = baseSchema.refine((data) => data.password === data.confirmPassword, {
     message: "Passwords don't match",
 })
-
-const clientSignupSchema = baseSchema.extend({
+const clientSignupSchema = refinedBaseSchema.extend({
   address:z.string()
     .min(1,"address is required")
     .min(10, 'Address too short')
@@ -26,4 +26,21 @@ const loginSchema = z.object({
     identifier: z.string().min(1,"identifier is required")  ,
     password: z.string().min(1,"password is required")
 })
-export {clientSignupSchema ,loginSchema}
+const resetPasswordSchema = baseSchema.pick({
+    password:true,
+    confirmPassword:true,
+    email:true
+}).extend({
+    resetToken:z.uuid("invalid reset token")
+}).refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords don't match",
+})
+const enterEmailSchema = baseSchema.pick({
+    email:true
+})
+const enterOtpSchema = baseSchema.pick({
+    email:true,
+}).extend({
+    otp:z.string().min(1,"otp is required").length(6,"otp must be 6 digits")
+})
+export {clientSignupSchema ,loginSchema,resetPasswordSchema,enterEmailSchema,enterOtpSchema}

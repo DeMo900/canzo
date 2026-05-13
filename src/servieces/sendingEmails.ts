@@ -1,4 +1,3 @@
-import { Hono,Context } from "hono"; // 1. Import Context
 import { Resend } from 'resend';
 
 type emailData = {
@@ -6,12 +5,8 @@ type emailData = {
   subject: string;
   html: string;
 }
-type Bindings = {
-  RESEND_API_KEY: string;
-  D1_DATABASE: D1Database; // If you're also using your 'canzo' DB
-}
-async function sendEmail(c: Context<{ Bindings: Bindings }>, emailData: emailData) {
-  const resend = new Resend(c.env.RESEND_API_KEY);
+async function sendEmail(apiKey:string,emailData: emailData) {
+  const resend = new Resend(apiKey);
   
   return await resend.emails.send({
     from: 'onboarding@resend.dev',
@@ -20,4 +15,4 @@ async function sendEmail(c: Context<{ Bindings: Bindings }>, emailData: emailDat
     html: emailData.html
   });
 }
-export default sendEmail;
+export {sendEmail,type emailData};

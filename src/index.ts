@@ -3,6 +3,6 @@ import authRouter from './routes/auth';
 import {prettyJSON} from "hono/pretty-json"
 const app = new Hono()
 app.use(prettyJSON())
-app.route("/", authRouter)
+app.route("/auth", authRouter)
 
 export default app
