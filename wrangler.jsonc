@@ -9,13 +9,14 @@
 			"database_name": "canzo",
 			"database_id": "2b8c122f-2758-4c11-bbd5-60f08e220391"
 		}
-	]
-	// "compatibility_flags": [
-	//   "nodejs_compat"
-	// ],
-	// "vars": {
-	//   "MY_VAR": "my-variable"
-	// },
+	],
+	 "compatibility_flags": [
+	   "nodejs_compat"
+	 ],
+	 "vars": {
+	   "MY_VAR": "my-variable",
+	 "JWT_SECRET": "your-jwt-secret"
+	 },
 	// "kv_namespaces": [
 	//   {
 	//     "binding": "MY_KV_NAMESPACE",
@@ -41,5 +42,5 @@
 	// "observability": {
 	//   "enabled": true,
 	//   "head_sampling_rate": 1
-	// }
+	//}
 }
