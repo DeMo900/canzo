@@ -1,0 +1,158 @@
+import { Hono } from "hono";
+import { JwtVariables } from "hono/jwt";
+import {zValidator} from "@hono/zod-validator"
+import {arrayBasketsSchema} from "../validation/client"
+//type users
+type User = {
+    id: number
+    user_name: string
+    phone_number: string
+    email: string
+    password_hash: string
+    user_role: "Client" | "Admin"
+}
+//client
+type Client = {
+    id: number
+    user_id: number
+    address: string
+    activity_type: string
+    activity_name: string
+}
+//baskets
+type Basket = {
+    id: number
+    user_id: number
+    content_type: string
+    content_weight: number
+    order_id: number
+    is_full: boolean
+}
+//binding
+type Bindings = {
+    canzo: D1Database
+    JWT_SECRET: string
+    RESEND_API_KEY: string
+    canzo_KV:KVNamespace
+    Variables : JwtVariables
+}
+//orders
+type Order = {
+    id: number
+    client_id: number
+    status: string
+    created_at: string
+}
+type TokenPayload = {
+    userId: number
+    user_role: string
+}
+const clientRouter = new Hono<{Bindings:Bindings}>()
+clientRouter.post("/baskets",zValidator("json",arrayBasketsSchema,(result,c)=>{
+    if(!result.success){
+        return c.json({error:result.error.issues[0].message},400)
+    }
+}),async(c)=>{
+    try{
+ const  {userId,user_role} = c.get("jwtPayload") as TokenPayload
+ if(user_role !== "Client"){
+return c.json({error:"Unauthorized"},401)
+ }
+ const baskets = c.req.valid("json")
+    await c.env.canzo.batch([
+    ...baskets.map(b =>
+        c.env.canzo.prepare("INSERT INTO baskets (user_id, content_type, content_weight, is_full) VALUES (?1, ?2, ?3, false)")
+            .bind(userId, b.content_type, b.content_weight)
+    )
+])
+return c.json({ message: "Baskets added successfully" }, 201);
+    }catch(error){
+        console.log(`error while adding basket ${error}`)
+        return c.json({error:"Internal server error"},500)
+    }
+}).patch("/baskets/:id/fill",async(c)=>{
+    try{
+const {userId,user_role} = c.get("jwtPayload") as TokenPayload
+if(user_role !== "Client"){
+    return c.json({error:"Unauthorized"},401)
+}
+const basketId = c.req.param("id")
+const isOrderExist = 
+await c.env.canzo.prepare("SELECT id,client_id FROM orders WHERE client_id = ?1 AND status = 'Pending'").bind(userId).first<Order>()
+if(isOrderExist){
+const updateBasketWithOrderResult= await c.env.canzo.prepare("UPDATE baskets SET is_full = 1 , order_id = ?1, updated_at = datetime('now') WHERE id = ?2 AND client_id = ?3").bind(isOrderExist.id,basketId,userId).run()
+ if(updateBasketWithOrderResult.meta.changes === 0 ){
+   return c.json({error:"Failed to set basket to full or basket not found"},400)
+ }
+return c.json({message:"Basket filled successfully"},200)
+}
+
+const [insertrResult,updateBasketWithNoOrderResult]= await c.env.canzo.batch([
+ c.env.canzo.prepare("INSERT INTO orders (client_id,staatus) VALUES (?1,Pending)").bind(userId),
+ c.env.canzo.prepare("UPDATE baskets SET is_full = 1 , order_id = last_insert_rowid(), updated_at = datetime('now') WHERE id = ?1 AND client_id = ?2").bind(basketId,userId)
+])
+if(updateBasketWithNoOrderResult.meta.changes === 0){
+return c.json({error:"Basket not found "},404)
+}
+return c.json({message:"Basket filled successfully"},200)
+    }catch(error){
+        console.log(`error while setting basket full ${error}`)
+        return c.json({error:"Internal server error"},500)
+    }
+}).get("/baskets",async(c)=>{
+    try{
+const {userId,user_role} = c.get("jwtPayload") as TokenPayload
+if(user_role !== "Client"){
+    return c.json({error:"Unauthorized"},401)
+}
+const baskets = await c.env.canzo.prepare("SELECT content_type,content_weight,is_full FROM baskets WHERE client_id = ?1").bind(userId).all()
+return c.json({baskets})
+    }catch(error){
+        console.log(`error while getting baskets ${error}`)
+        return c.json({error:"Internal server error"},500)
+    }
+}).get("/orders/:status",async(c)=>{
+    try{
+const {userId,user_role} = c.get("jwtPayload") as TokenPayload
+const status = c.req.param("status")
+const OrderStatus = ["Pending","Completed","Cancelled"]
+if(!OrderStatus.includes(status)){
+    return c.json({error:"Invalid status"},400)
+}
+if(user_role !== "Client"){
+    return c.json({error:"Unauthorized"},401)
+
+}
+const orders = await c.env.canzo.prepare("SELECT * FROM orders WHERE client_id = ?1 AND status = ?2").bind(userId,status).all()
+return c.json({orders})
+    }catch(error){
+        console.log(`error while getting orders ${error}`)
+        return c.json({error:"Internal server error"},500)
+    }
+}).get("/transactions",async(c)=>{
+    try{    
+const {userId,user_role} = c.get("jwtPayload") as TokenPayload
+if(user_role !== "Client"){
+    return c.json({error:"Unauthorized"},401)
+}
+const transactions = await c.env.canzo.prepare("SELECT * FROM transactions WHERE client_id = ?1").bind(userId).all()
+return c.json({transactions})
+    }catch(error){
+        console.log(`error while getting transactions ${error}`)
+        return c.json({error:"Internal server error"},500)
+    }
+}).get("/wallet",async(c)=>{
+    try{
+const {userId,user_role} = c.get("jwtPayload") as TokenPayload
+if(user_role !== "Client"){
+    return c.json({error:"Unauthorized"},401)
+}
+const wallet = await c.env.canzo.prepare("SELECT * FROM wallets WHERE user_id = ?1").bind(userId).first()
+return c.json({wallet})
+    }catch(error){
+        console.log(`error while getting wallet ${error}`)
+        return c.json({error:"Internal server error"},500)
+    }
+})
+
+export default clientRouter

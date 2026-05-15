@@ -42,7 +42,7 @@ const authRouter = new Hono<{Bindings:Bindings}>()
     const hashedPassword = await bcrypt.hash(password, 10)
 const user = await c.env.canzo.prepare("SELECT user_name FROM users WHERE email = ?1 OR phone_number = ?2").bind(email,phoneNumber).first<User>()
     if(user){
-        return c.json({error:"User already exists"},400)
+        return c.json({error:"User already exists"},409)
     }
 await c.env.canzo.batch([
     c.env.canzo
@@ -123,9 +123,9 @@ await c.env.canzo_KV.put(`reset-token:${email}`,resetToken,{expirationTtl:2000})
 return c.json({message:"OTP verified successfully",resetToken},200)
 }catch(error){
     console.log(`error while verifying OTP ${error}`)
-    return c.json({error:"Internal server error"},200)
+    return c.json({error:"Internal server error"},500)
 }
-    }).put("/reset-password",zValidator("json",resetPasswordSchema,(result,c)=>{
+    }).patch("/reset-password",zValidator("json",resetPasswordSchema,(result,c)=>{
         if(!result.success){
             return c.json({error:result.error.issues[0].message},400)
         }
