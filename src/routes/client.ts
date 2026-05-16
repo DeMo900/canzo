@@ -71,9 +71,9 @@ clientRouter.post("/baskets",zValidator("json",arrayBasketsSchema,(result,c)=>{
     }
 }),async(c)=>{
     try{
- const  {userId} = c.get("jwtPayload") as TokenPayload
+ const {userId} = c.get("jwtPayload") as TokenPayload
  const baskets = c.req.valid("json")
-    await c.env.canzo.batch([
+   await c.env.canzo.batch([
     ...baskets.map(b =>
         c.env.canzo.prepare("INSERT INTO baskets (client_id, content_type, content_weight, is_full) VALUES (?1, ?2, ?3, false)")
             .bind(userId, b.content_type, b.content_weight)

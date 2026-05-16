@@ -18,7 +18,7 @@ app.use("/api/client/*",(c,next)=>{
   return jwtMiddleware(c, next)
 })
 app.use("/api/client/*",verifyRole("Client"))
-app.route("/auth/*", authRouter)
-app.route("/api/client/*", clientRouter)
+app.route("/auth/", authRouter)
+app.route("/api/client/", clientRouter)
 
 export default app
