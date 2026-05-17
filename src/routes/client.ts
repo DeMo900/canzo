@@ -133,7 +133,7 @@ if(!OrderStatus.includes(status)){
 if(user_role !== "Client"){
   return c.json({error:"Forbidden"}, 403)
 }
-const orders = await c.env.canzo.prepare("SELECT * FROM orders WHERE client_id = ?1 AND status = ?2").bind(userId,status).all<Order[]>()
+const orders = await c.env.canzo.prepare("SELECT o.id,o.status,o.created_at ,c.address, COUNT(b.id) AS total_baskets ,SUM(b.content_weight) AS total_weight ,COUNT(CASE WHEN b.content_type = 'Plastic' THEN 1 END) AS plastic_count ,COUNT(CASE WHEN b.content_type = 'Canz' THEN 1 END) AS canz_count FROM orders o JOIN baskets b ON o.id = b.order_id JOIN clients c ON o.client_id = c.user_id WHERE o.client_id = ?1 AND status = ?2 GROUP BY o.id,o.status,o.created_at,c.address").bind(userId,status).all<Order[]>()
 return c.json({orders:orders.results})
     }catch(error){
         console.log(`error while getting orders ${error}`)
@@ -142,7 +142,7 @@ return c.json({orders:orders.results})
 }).get("/transactions",async(c)=>{
     try{    
 const {userId} = c.get("jwtPayload") as TokenPayload
-const transactions = await c.env.canzo.prepare("SELECT * FROM transactions WHERE client_id = ?1").bind(userId).all<Transaction[]>()
+const transactions = await c.env.canzo.prepare("SELECT id,amount,created_at,screenshot_path FROM transactions WHERE client_id = ?1").bind(userId).all<Transaction[]>()
 return c.json({transactions:transactions.results})
     }catch(error){
         console.log(`error while getting transactions ${error}`)
@@ -151,7 +151,7 @@ return c.json({transactions:transactions.results})
 }).get("/wallet",async(c)=>{
     try{
 const {userId} = c.get("jwtPayload") as TokenPayload
-const wallet = await c.env.canzo.prepare("SELECT * FROM wallets WHERE user_id = ?1").bind(userId).first<Wallet>()
+const wallet = await c.env.canzo.prepare("SELECT id, balance FROM wallets WHERE user_id = ?1").bind(userId).first<Wallet>()
 return c.json({wallet})
     }catch(error){
         console.log(`error while getting wallet ${error}`)

@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import authRouter from './routes/auth';
+import adminRouter from './routes/admin';
 import {jwt} from "hono/jwt"
 import clientRouter from './routes/client';
 import {prettyJSON} from "hono/pretty-json"
@@ -18,6 +19,7 @@ app.use("/api/client/*",(c,next)=>{
   return jwtMiddleware(c, next)
 })
 app.use("/api/client/*",verifyRole("Client"))
+app.route("/api/admin/", adminRouter)
 app.route("/auth/", authRouter)
 app.route("/api/client/", clientRouter)
 
