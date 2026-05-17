@@ -24,7 +24,7 @@ type Client = {
 type Bindings = {
     canzo: D1Database
     JWT_SECRET: string
-    RESEND_API_KEY: string
+    BRAVO_API_KEY: string
     canzo_KV:KVNamespace
 }
 const authRouter = new Hono<{Bindings:Bindings}>()
@@ -100,7 +100,7 @@ const emailData: emailData = {
 }
 await c.env.canzo_KV.delete(`otp:${email}`)
 await c.env.canzo_KV.put(`otp:${email}`,otp,{expirationTtl:300})
-await sendEmail(c.env.RESEND_API_KEY,emailData)
+await sendEmail(c.env.BRAVO_API_KEY,emailData)
 return c.json({message:"OTP sent successfully"})
 }catch(error){
     console.log(`error while sending otp ${error}`)

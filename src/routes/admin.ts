@@ -71,5 +71,5 @@ const adminRouter = new Hono<{Bindings:Bindings,Variables:Variables}>()
         console.log(`error while getting orders ${error}`)
         return c.json({error:"Internal server error"},500)
     }
-})
+}) 
 export default adminRouter
