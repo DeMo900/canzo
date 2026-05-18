@@ -104,18 +104,23 @@ const adminRouter = new Hono<{Bindings:Bindings,Variables:Variables}>()
         await c.env.CANZO_R2.put(fileName,image,{
             "httpMetadata":{contentType:image.type}
         })
-        const updateOrder = c.env.canzo.prepare("UPDATE orders SET status = ?1 , updated_at = datetime('now') WHERE id = ?2 ").bind(status,id)
-        const insertTransaction = c.env.canzo.prepare("INSERT INTO transactions (client_id,screenshot_path,amount) VALUES((SELECT client_id FROM orders WHERE id = ?1),?2,300)").bind(id,fileName)
-        const updateBasket = c.env.canzo.prepare("UPDATE baskets SET is_full = 0 , order_id = NULL ,updated_at = datetime('now') WHERE order_id = ?1").bind(id)
-        const order = await c.env.canzo.prepare("SELECT id FROM orders WHERE id = ?1").bind(id).first();
-        if (order) return c.json({ error: "Order not found" }, 404);
+const order = await c.env.canzo.prepare("SELECT id FROM orders WHERE id = ?1").bind(id).first();
+if (!order) return c.json({ error: "Order not found" }, 404);
 
-        const [orderResult, transactionResult, basketResult] = await c.env.canzo.batch([
-  updateOrder,
-  insertTransaction,
-  updateBasket,
+const getBaskets = await c.env.canzo.prepare("SELECT id,content_type,content_weight FROM baskets WHERE order_id = ?1").bind(id).all<Basket>();
+
+const mappedBaskets = getBaskets.results.map((basket: Basket) =>
+  c.env.canzo.prepare("INSERT INTO sold (content_type,content_weight,total_price) VALUES(?1,?2,300)").bind(basket.content_type, basket.content_weight)
+);
+
+const [orderResult] = await c.env.canzo.batch([
+  c.env.canzo.prepare("UPDATE orders SET status = ?1, updated_at = datetime('now') WHERE id = ?2").bind(status, id),
+  c.env.canzo.prepare("INSERT INTO transactions (client_id,screenshot_path,amount) VALUES((SELECT client_id FROM orders WHERE id = ?1),?2,300)").bind(id, fileName),
+  ...mappedBaskets,
+  c.env.canzo.prepare("UPDATE baskets SET is_full = 0, order_id = NULL, updated_at = datetime('now') WHERE order_id = ?1").bind(id),
 ]);
-if(orderResult.meta.changes === 0 || transactionResult.meta.changes === 0 || basketResult.meta.changes === 0){
+        
+if(orderResult.meta.changes === 0){
     return c.json({error:"Order not found"},404)
 }
         return c.json({message:"Order updated successfully"},200)   
