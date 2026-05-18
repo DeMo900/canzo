@@ -53,6 +53,7 @@ type Bindings = {
     canzo: D1Database
     JWT_SECRET: string
     RESEND_API_KEY: string
+    CANZO_R2: R2Bucket
     canzo_KV:KVNamespace
 }
 type Variables = {
@@ -73,8 +74,10 @@ const adminRouter = new Hono<{Bindings:Bindings,Variables:Variables}>()
     }
 }).patch("/order/:id",async(c)=>{
     try{
-      const {id} = await c.req.param()
-      const {status,image} = await c.req.json()
+      const {id} = c.req.param()
+      const body = await c.req.parseBody()
+      const image = body.image as File 
+      const status = body.status as String
       if(status === "Pending" || status === "Completed" || status === "Cancelled"){
         if (status === "Cancelled"){
      const [updateOrderResult,setEmptyResult] = await c.env.canzo.batch([
@@ -87,7 +90,35 @@ const adminRouter = new Hono<{Bindings:Bindings,Variables:Variables}>()
     return c.json({message:"Order cancelled successfully"},200)
     }
     if(status === "Completed"){
-        
+        if (!image || !(image instanceof File)) {
+            return c.json({error:"Invalid image type"},400)
+        }
+        if(image.size > 2 * 1024 * 1024){
+            return c.json({error:"Image size is greater than 2MB"},400)
+        }
+        const allowedTypes = ["image/jpeg","image/png","image/webp"]
+        if(!allowedTypes.includes(image.type)){
+            return c.json({error:"Invalid image type"},400)
+        }
+        const fileName = `${Date.now()}-${image.name}`
+        await c.env.CANZO_R2.put(fileName,image,{
+            "httpMetadata":{contentType:image.type}
+        })
+        const updateOrder = c.env.canzo.prepare("UPDATE orders SET status = ?1 , updated_at = datetime('now') WHERE id = ?2 ").bind(status,id)
+        const insertTransaction = c.env.canzo.prepare("INSERT INTO transactions (client_id,screenshot_path,amount) VALUES((SELECT client_id FROM orders WHERE id = ?1),?2,300)").bind(id,fileName)
+        const updateBasket = c.env.canzo.prepare("UPDATE baskets SET is_full = 0 , order_id = NULL ,updated_at = datetime('now') WHERE order_id = ?1").bind(id)
+        const order = await c.env.canzo.prepare("SELECT id FROM orders WHERE id = ?1").bind(id).first();
+        if (order) return c.json({ error: "Order not found" }, 404);
+
+        const [orderResult, transactionResult, basketResult] = await c.env.canzo.batch([
+  updateOrder,
+  insertTransaction,
+  updateBasket,
+]);
+if(orderResult.meta.changes === 0 || transactionResult.meta.changes === 0 || basketResult.meta.changes === 0){
+    return c.json({error:"Order not found"},404)
+}
+        return c.json({message:"Order updated successfully"},200)   
     }
       }else{
         return c.json({error:"Invalid status"},400)

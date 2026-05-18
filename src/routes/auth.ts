@@ -62,7 +62,7 @@ return c.json({message:"Client registered successfully"},201)
     }),async(c)=>{
 const {identifier,password} = c.req.valid("json")
 try{
-const result = await c.env.canzo.prepare("SELECT password_hash,user_role,id FROM users WHERE email = ?1 OR user_name = ?2").bind(identifier,identifier).first<User>()
+const result = await c.env.canzo.prepare("SELECT password_hash,user_role,id,user_name FROM users WHERE email = ?1 OR user_name = ?2").bind(identifier,identifier).first<User>()
 if(!result){
     return c.json({error:"Invalid credentials"},401)
 }
@@ -72,7 +72,7 @@ if(!passwordMatch){
 }
 const expirationTime = Math.floor(Date.now() / 1000) + (60 * 60 * 24 * 30); // 30 days
 const token = await sign({userId:result.id,user_role:result.user_role,exp: expirationTime}, c.env.JWT_SECRET, );
-return c.json({message:"Login successful", token});
+return c.json({message:"Login successful", token,user:{id:result.id,user_role:result.user_role,user_name:result.user_name}});
 }catch(error){
     console.log(error)
     return c.json({error:"Internal server error"},500)
@@ -104,7 +104,7 @@ await sendEmail(c.env.BRAVO_API_KEY,emailData)
 return c.json({message:"OTP sent successfully"})
 }catch(error){
     console.log(`error while sending otp ${error}`)
-    return c.json({error:"Internal server error"},500)
+    return c.json({error:"Internal server error "+error},500)
 }
     }).post("/verify-otp",zValidator("json",enterOtpSchema,(result,c)=>{
         if(!result.success){

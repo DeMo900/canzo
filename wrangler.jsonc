@@ -23,19 +23,20 @@
 			"id": "65e25e8a704b41cdab80953c95c10f62",
 			"remote": true
 		}
-	], 
+	],
 	// "kv_namespaces": [
 	//   {
 	//     "binding": "MY_KV_NAMESPACE",
 	//     "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 	//   }
 	// ],
-	// "r2_buckets": [
-	//   {
-	//     "binding": "MY_BUCKET",
-	//     "bucket_name": "my-bucket"
-	//   }
-	// ],
+	"r2_buckets": [
+		{
+			"binding": "CANZO_R2",
+			"bucket_name": "canzo",
+			"remote": true
+		}
+	],
 	// "d1_databases": [
 	//   {
 	//     "binding": "MY_DB",

@@ -42,7 +42,11 @@ CREATE TABLE IF NOT EXISTS transactions (
 );
 CREATE TABlE IF NOT EXISTS orders (
 id INTEGER PRIMARY KEY AUTOINCREMENT,
-client_id INTEGER NOT NULL,
+client_id INTEGER{
+			"binding": "CANZO_R2",
+			"bucket_name": "canzo",
+			"remote": true
+		} NOT NULL,
 status TEXT NOT NULL CHECK(status IN ('Pending', 'Completed', 'Cancelled')),
 created_at DATETIME DEFAULT (datetime('now'))
 );
