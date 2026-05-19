@@ -98,7 +98,7 @@ const {userId,user_role} = c.get("jwtPayload") as TokenPayload
 if(user_role !== "Client"){
   return c.json({error:"Forbidden"}, 403)
 }
-const baskets = await c.env.canzo.prepare("SELECT id,content_type,content_weight,is_full FROM baskets WHERE client_id = ?1").bind(userId).all<Basket[]>()
+const baskets = await c.env.canzo.prepare("SELECT id,content_type,content_weight,is_full FROM baskets WHERE client_id = ?1").bind(userId).all<Basket>()
 return c.json({baskets:baskets.results})
     }catch(error){
         console.log(`error while getting baskets ${error}`)

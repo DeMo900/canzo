@@ -28,11 +28,6 @@ type Transaction = {
     status: string
     created_at: string
 }
-type Wallet = {
-    user_id: number
-    balance: number
-    created_at: string
-}
 type Bindings = {
     canzo: D1Database
     JWT_SECRET: string
@@ -71,7 +66,7 @@ const adminRouter = new Hono<{Bindings:Bindings,Variables:Variables}>()
       const image = body.image as File 
       const status = body.status as string
       if( status === "Completed" || status === "Cancelled"){
-        const order = await c.env.canzo.prepare("SELECT id,status FROM orders WHERE id = ?1").bind(id).first();
+        const order = await c.env.canzo.prepare("SELECT id,status FROM orders WHERE id = ?1").bind(id).first<{id:number,status:string}>();
 if (!order || order.status !== "Pending" ) return c.json({ error: "Order not found or already updated" }, 404);
         if (status === "Cancelled"){
      await c.env.canzo.batch([
@@ -137,6 +132,14 @@ return c.json({
 })
     }catch(error){
         console.log(`error while getting analytics ${error}`)
+        return c.json({error:"Internal server error"},500)
+    }
+}).get("/transactions",async(c)=>{
+    try{
+        const transactions = await c.env.canzo.prepare("SELECT t.id, t.amount,t.created_at,t.screenshot_path,u.user_name FROM transactions t JOIN users u ON t.client_id = u.id  ORDER BY t.created_at DESC").all<Transaction>()
+        return c.json({transactions:transactions.results},200)
+    }catch(error){
+        console.log(`error while getting transactions ${error}`)
         return c.json({error:"Internal server error"},500)
     }
 })
