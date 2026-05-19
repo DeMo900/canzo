@@ -2,23 +2,7 @@ import { Hono } from "hono";
 import { JwtVariables } from "hono/jwt";
 import {zValidator} from "@hono/zod-validator"
 import {arrayBasketsSchema} from "../validation/client"
-//type users
-type User = {
-    id: number
-    user_name: string
-    phone_number: string
-    email: string
-    password_hash: string
-    user_role: "Client" | "Admin"
-}
-//client
-type Client = {
-    id: number
-    user_id: number
-    address: string
-    activity_type: string
-    activity_name: string
-}
+
 //baskets
 type Basket = {
     id: number
@@ -55,7 +39,6 @@ type Transaction = {
 }
 //wallet
 type Wallet = {
-    id: number
     user_id: number
     balance: number
     created_at: string
@@ -97,13 +80,12 @@ const updateBasketWithOrderResult= await c.env.canzo.prepare("UPDATE baskets SET
  }
 return c.json({message:"Basket filled successfully"},200)
 }
-
 const [insertrResult,updateBasketWithNoOrderResult]= await c.env.canzo.batch([
- c.env.canzo.prepare("INSERT INTO orders (client_id,status) VALUES (?1,Pending)").bind(userId),
- c.env.canzo.prepare("UPDATE baskets SET is_full = 1 , order_id = last_insert_rowid(), updated_at = datetime('now') WHERE id = ?1 AND client_id = ?2").bind(basketId,userId)
+ c.env.canzo.prepare("INSERT INTO orders (client_id,status) VALUES (?1,'Pending')").bind(userId),
+ c.env.canzo.prepare("UPDATE baskets SET is_full = 1 , order_id = 2, updated_at = datetime('now') WHERE id = ?1 AND client_id = ?2").bind(basketId,userId)
 ])
 if(updateBasketWithNoOrderResult.meta.changes === 0){
-return c.json({error:"Basket not found "},404)
+return c.json({error:"Failed to set basket to full or basket not found"},400)
 }
 return c.json({message:"Basket filled successfully"},200)
     }catch(error){
@@ -133,7 +115,7 @@ if(!OrderStatus.includes(status)){
 if(user_role !== "Client"){
   return c.json({error:"Forbidden"}, 403)
 }
-const orders = await c.env.canzo.prepare("SELECT o.id,o.status,o.created_at ,c.address, COUNT(b.id) AS total_baskets ,SUM(b.content_weight) AS total_weight ,COUNT(CASE WHEN b.content_type = 'Plastic' THEN 1 END) AS plastic_count ,COUNT(CASE WHEN b.content_type = 'Canz' THEN 1 END) AS canz_count FROM orders o JOIN baskets b ON o.id = b.order_id JOIN clients c ON o.client_id = c.user_id WHERE o.client_id = ?1 AND status = ?2 GROUP BY o.id,o.status,o.created_at,c.address").bind(userId,status).all<Order[]>()
+const orders = await c.env.canzo.prepare("SELECT o.id,o.status,o.created_at ,c.address, COUNT(b.id) AS total_baskets ,SUM(b.content_weight) AS total_weight ,COUNT(CASE WHEN b.content_type = 'Plastic' THEN 1 END) AS plastic_count ,COUNT(CASE WHEN b.content_type = 'Canz' THEN 1 END) AS canz_count FROM orders o LEFT JOIN baskets b ON o.id = b.order_id JOIN clients c ON o.client_id = c.user_id WHERE o.client_id = ?1 AND status = ?2 GROUP BY o.id,o.status,o.created_at,c.address").bind(userId,status).all<Order>()
 return c.json({orders:orders.results})
     }catch(error){
         console.log(`error while getting orders ${error}`)
@@ -142,7 +124,7 @@ return c.json({orders:orders.results})
 }).get("/transactions",async(c)=>{
     try{    
 const {userId} = c.get("jwtPayload") as TokenPayload
-const transactions = await c.env.canzo.prepare("SELECT id,amount,created_at,screenshot_path FROM transactions WHERE client_id = ?1").bind(userId).all<Transaction[]>()
+const transactions = await c.env.canzo.prepare("SELECT id,amount,created_at,screenshot_path FROM transactions WHERE client_id = ?1").bind(userId).all<Transaction>()
 return c.json({transactions:transactions.results})
     }catch(error){
         console.log(`error while getting transactions ${error}`)
@@ -151,11 +133,15 @@ return c.json({transactions:transactions.results})
 }).get("/wallet",async(c)=>{
     try{
 const {userId} = c.get("jwtPayload") as TokenPayload
-const wallet = await c.env.canzo.prepare("SELECT id, balance FROM wallets WHERE user_id = ?1").bind(userId).first<Wallet>()
+let wallet = await c.env.canzo.prepare("SELECT balance FROM wallets WHERE user_id = ?1").bind(userId).first<Wallet>()
+if (!wallet){
+    await c.env.canzo.prepare("INSERT INTO wallets (user_id, balance) VALUES (?1, 0)").bind(userId).run()
+     wallet = await c.env.canzo.prepare("SELECT balance FROM wallets WHERE user_id = ?1").bind(userId).first<Wallet>()
+}
 return c.json({wallet})
     }catch(error){
         console.log(`error while getting wallet ${error}`)
-        return c.json({error:"Internal server error"},500)
+        return c.json({error:"Internal server error",message:error},500)
     }
 })
 

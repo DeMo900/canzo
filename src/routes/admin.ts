@@ -1,21 +1,6 @@
 import {Hono} from 'hono';
 
 //types
-type User = {
-    id: number
-    user_name: string
-    phone_number: string
-    email: string
-    password_hash: string
-    user_role: "Client" | "Admin"
-}
-type Client = {
-    id: number
-    user_id: number
-    address: string
-    activity_type: string
-    activity_name: string
-}
 type Basket = {
     id: number
     client_id: number
@@ -44,7 +29,6 @@ type Transaction = {
     created_at: string
 }
 type Wallet = {
-    id: number
     user_id: number
     balance: number
     created_at: string
@@ -73,20 +57,21 @@ const adminRouter = new Hono<{Bindings:Bindings,Variables:Variables}>()
         return c.json({error:"Internal server error"},500)
     }
 }).patch("/order/:id",async(c)=>{
+    let fileName: string | null = null;
     try{
-      const {id} = c.req.param()
-      const body = await c.req.parseBody()
+      const id = Number(c.req.param("id"))
+      if(isNaN(id)) return c.json({error:"Invalid order id"},400)
+       const body = await c.req.parseBody()
       const image = body.image as File 
-      const status = body.status as String
-      if(status === "Pending" || status === "Completed" || status === "Cancelled"){
+      const status = body.status as string
+      if( status === "Completed" || status === "Cancelled"){
+        const order = await c.env.canzo.prepare("SELECT id,status FROM orders WHERE id = ?1").bind(id).first();
+if (!order || order.status !== "Pending" ) return c.json({ error: "Order not found or already updated" }, 404);
         if (status === "Cancelled"){
-     const [updateOrderResult,setEmptyResult] = await c.env.canzo.batch([
-        c.env.canzo.prepare("UPDATE orders SET status = ?1 , updated_at = datetime('now') WHERE id = ?2").bind(status,id),
+     await c.env.canzo.batch([
+        c.env.canzo.prepare("UPDATE orders SET status = ?1 WHERE id = ?2").bind(status,id),
         c.env.canzo.prepare("UPDATE baskets SET is_full = 0 , order_id = NULL, updated_at = datetime('now') WHERE order_id = ?1").bind(id)
      ])
-    if(updateOrderResult.meta.changes === 0 || setEmptyResult.meta.changes === 0){
-        return c.json({error:"Order not found"},404)
-    }
     return c.json({message:"Order cancelled successfully"},200)
     }
     if(status === "Completed"){
@@ -100,37 +85,51 @@ const adminRouter = new Hono<{Bindings:Bindings,Variables:Variables}>()
         if(!allowedTypes.includes(image.type)){
             return c.json({error:"Invalid image type"},400)
         }
-        const fileName = `${Date.now()}-${image.name}`
+        fileName = `${Date.now()}-${image.name}`
         await c.env.CANZO_R2.put(fileName,image,{
             "httpMetadata":{contentType:image.type}
         })
-const order = await c.env.canzo.prepare("SELECT id FROM orders WHERE id = ?1").bind(id).first();
-if (!order) return c.json({ error: "Order not found" }, 404);
-
 const getBaskets = await c.env.canzo.prepare("SELECT id,content_type,content_weight FROM baskets WHERE order_id = ?1").bind(id).all<Basket>();
 
 const mappedBaskets = getBaskets.results.map((basket: Basket) =>
   c.env.canzo.prepare("INSERT INTO sold (content_type,content_weight,total_price) VALUES(?1,?2,300)").bind(basket.content_type, basket.content_weight)
 );
 
-const [orderResult] = await c.env.canzo.batch([
-  c.env.canzo.prepare("UPDATE orders SET status = ?1, updated_at = datetime('now') WHERE id = ?2").bind(status, id),
+await c.env.canzo.batch([
+  c.env.canzo.prepare("UPDATE orders SET status = ?1 WHERE id = ?2").bind(status, id),
   c.env.canzo.prepare("INSERT INTO transactions (client_id,screenshot_path,amount) VALUES((SELECT client_id FROM orders WHERE id = ?1),?2,300)").bind(id, fileName),
   ...mappedBaskets,
   c.env.canzo.prepare("UPDATE baskets SET is_full = 0, order_id = NULL, updated_at = datetime('now') WHERE order_id = ?1").bind(id),
 ]);
-        
-if(orderResult.meta.changes === 0){
-    return c.json({error:"Order not found"},404)
-}
         return c.json({message:"Order updated successfully"},200)   
     }
       }else{
         return c.json({error:"Invalid status"},400)
       }
     }catch(error){
+      if (fileName) {
+        await c.env.CANZO_R2.delete(fileName);
+      }
         console.log(`error while updating order status ${error}`)
         return c.json({error:"Internal server error"},500)
     }
-})  
+}).get("/analytics",async(c)=>{
+    try{
+const [pendingOrders,completedOrders,users,totalRevenue] = await c.env.canzo.batch([
+    c.env.canzo.prepare("SELECT COUNT(*) as count FROM orders WHERE status = 'Pending'"),
+    c.env.canzo.prepare("SELECT COUNT(*) as count FROM orders WHERE status = 'Completed'"),
+    c.env.canzo.prepare("SELECT COUNT(*) as count FROM users WHERE user_role = 'Client'"),
+    c.env.canzo.prepare("SELECT SUM(amount) as count FROM transactions")
+])
+return c.json({
+    pendingOrders:pendingOrders.results,
+    completedOrders:completedOrders.results,
+    users:users.results,
+    totalRevenue:totalRevenue.results
+})
+    }catch(error){
+        console.log(`error while getting analytics ${error}`)
+        return c.json({error:"Internal server error"},500)
+    }
+})
 export default adminRouter

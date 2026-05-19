@@ -55,7 +55,7 @@ return c.json({message:"Client registered successfully"},201)
     console.log(`error while registering client ${error}`)
     return c.json({error:"Internal server error"},500)
         }
-    }).post("login",zValidator("json",loginSchema,(result,c)=>{
+    }).post("/login",zValidator("json",loginSchema,(result,c)=>{
         if(!result.success){
             return c.json({error:result.error.issues[0].message},400)
         }
