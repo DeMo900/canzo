@@ -49,9 +49,15 @@ type TokenPayload = {
 }
 const adminRouter = new Hono<{Bindings:Bindings,Variables:Variables}>()
 .get("/orders",async(c)=>{
-    try{
-      const orders = await c.env.canzo.prepare("SELECT o.id, u.user_name,c.address,u.phone_number,o.created_at,o.status ,COUNT(b.id) AS baskets_count, SUM(b.content_weight) AS total_weight ,COUNT(CASE WHEN b.content_type = 'Plastic' THEN 1 END) AS plastic_count ,COUNT(CASE WHEN b.content_type = 'Canz' THEN 1 END) AS canz_count FROM orders o JOIN users u ON o.client_id = u.id JOIN baskets b ON o.id = b.order_id JOIN clients c ON o.client_id = c.user_id GROUP BY u.user_name,o.created_at,o.status,c.address,u.phone_number,o.id").all<OrderWithDetails[]>()
+    const status = c.req.query("status")
+        try{
+               if (status === "Pending"){
+      const orders = await c.env.canzo.prepare("SELECT o.id, u.user_name,c.address,u.phone_number,o.created_at,o.status ,COUNT(b.id) AS baskets_count, SUM(b.content_weight) AS total_weight ,COUNT(CASE WHEN b.content_type = 'Plastic' THEN 1 END) AS plastic_count ,COUNT(CASE WHEN b.content_type = 'Canz' THEN 1 END) AS canz_count FROM orders o JOIN users u ON o.client_id = u.id JOIN baskets b ON o.id = b.order_id JOIN clients c ON o.client_id = c.user_id WHERE o.status = 'Pending' GROUP BY u.user_name,o.created_at,o.status,c.address,u.phone_number,o.id").all<OrderWithDetails>()
+     return c.json({orders:orders.results},200)
+    }else{
+      const orders = await c.env.canzo.prepare("SELECT o.id, u.user_name,c.address,u.phone_number,o.created_at,o.status ,COUNT(b.id) AS baskets_count, SUM(b.content_weight) AS total_weight ,COUNT(CASE WHEN b.content_type = 'Plastic' THEN 1 END) AS plastic_count ,COUNT(CASE WHEN b.content_type = 'Canz' THEN 1 END) AS canz_count FROM orders o JOIN users u ON o.client_id = u.id LEFT JOIN baskets b ON o.id = b.order_id JOIN clients c ON o.client_id = c.user_id GROUP BY u.user_name,o.created_at,o.status,c.address,u.phone_number,o.id").all<OrderWithDetails>()
    return c.json({orders:orders.results},200)
+    }
     }catch(error){
         console.log(`error while getting orders ${error}`)
         return c.json({error:"Internal server error"},500)
@@ -115,17 +121,19 @@ await c.env.canzo.batch([
     }
 }).get("/analytics",async(c)=>{
     try{
-const [pendingOrders,completedOrders,users,totalRevenue] = await c.env.canzo.batch([
+const [pendingOrders,completedOrders,users,totalRevenue,recentSales] = await c.env.canzo.batch([
     c.env.canzo.prepare("SELECT COUNT(*) as count FROM orders WHERE status = 'Pending'"),
     c.env.canzo.prepare("SELECT COUNT(*) as count FROM orders WHERE status = 'Completed'"),
     c.env.canzo.prepare("SELECT COUNT(*) as count FROM users WHERE user_role = 'Client'"),
-    c.env.canzo.prepare("SELECT SUM(amount) as count FROM transactions")
+    c.env.canzo.prepare("SELECT SUM(amount) as count FROM transactions"),
+    c.env.canzo.prepare("SELECT SUM(content_weight) as count, content_type FROM sold GROUP BY content_type")
 ])
 return c.json({
     pendingOrders:pendingOrders.results,
     completedOrders:completedOrders.results,
     users:users.results,
-    totalRevenue:totalRevenue.results
+    totalRevenue:totalRevenue.results,
+    recentSales:recentSales.results
 })
     }catch(error){
         console.log(`error while getting analytics ${error}`)
