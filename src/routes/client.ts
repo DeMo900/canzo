@@ -64,7 +64,7 @@ clientRouter.post("/baskets",zValidator("json",arrayBasketsSchema,(result,c)=>{
 ])
 return c.json({ message: "Baskets added successfully" }, 201);
     }catch(error){
-        console.log(`error while adding basket ${error}`)
+        console.error(`error while adding basket ${error}`)
         return c.json({error:"Internal server error"},500)
     }
 }).patch("/baskets/:id/fill",async(c)=>{
@@ -89,7 +89,7 @@ return c.json({error:"Failed to set basket to full or basket not found"},400)
 }
 return c.json({message:"Basket filled successfully"},200)
     }catch(error){
-        console.log(`error while setting basket full ${error}`)
+        console.error(`error while setting basket full ${error}`)
         return c.json({error:"Internal server error"},500)
     }
 }).get("/baskets",async(c)=>{
@@ -101,7 +101,7 @@ if(user_role !== "Client"){
 const baskets = await c.env.canzo.prepare("SELECT id,content_type,content_weight,is_full FROM baskets WHERE client_id = ?1").bind(userId).all<Basket>()
 return c.json({baskets:baskets.results})
     }catch(error){
-        console.log(`error while getting baskets ${error}`)
+        console.error(`error while getting baskets ${error}`)
         return c.json({error:"Internal server error"},500)
     }
 }).get("/orders/:status",async(c)=>{
@@ -118,7 +118,7 @@ if(user_role !== "Client"){
 const orders = await c.env.canzo.prepare("SELECT o.id,o.status,o.created_at ,c.address, COUNT(b.id) AS total_baskets ,SUM(b.content_weight) AS total_weight ,COUNT(CASE WHEN b.content_type = 'Plastic' THEN 1 END) AS plastic_count ,COUNT(CASE WHEN b.content_type = 'Canz' THEN 1 END) AS canz_count FROM orders o LEFT JOIN baskets b ON o.id = b.order_id JOIN clients c ON o.client_id = c.user_id WHERE o.client_id = ?1 AND status = ?2 GROUP BY o.id,o.status,o.created_at,c.address").bind(userId,status).all<Order>()
 return c.json({orders:orders.results})
     }catch(error){
-        console.log(`error while getting orders ${error}`)
+        console.error(`error while getting orders ${error}`)
         return c.json({error:"Internal server error"},500)
     }
 }).get("/transactions",async(c)=>{
@@ -127,7 +127,7 @@ const {userId} = c.get("jwtPayload") as TokenPayload
 const transactions = await c.env.canzo.prepare("SELECT id,amount,created_at,screenshot_path FROM transactions WHERE client_id = ?1").bind(userId).all<Transaction>()
 return c.json({transactions:transactions.results})
     }catch(error){
-        console.log(`error while getting transactions ${error}`)
+        console.error(`error while getting transactions ${error}`)
         return c.json({error:"Internal server error"},500)
     }
 }).get("/wallet",async(c)=>{
@@ -140,7 +140,7 @@ if (!wallet){
 }
 return c.json({wallet})
     }catch(error){
-        console.log(`error while getting wallet ${error}`)
+        console.error(`error while getting wallet ${error}`)
         return c.json({error:"Internal server error",message:error},500)
     }
 })

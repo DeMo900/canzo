@@ -20,6 +20,7 @@ app.use("/api/client/*",(c,next)=>{
   return jwtMiddleware(c, next)
 })
 app.use("/api/client/*",verifyRole("Client"))
+app.use("/api/admin/*",verifyRole("Admin"))
 app.route("/api/admin/", adminRouter)
 app.route("/auth/", authRouter)
 app.route("/api/client/", clientRouter)

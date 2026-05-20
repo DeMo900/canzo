@@ -33,8 +33,8 @@ type Transaction = {
     id: number
     client_id: number
     amount: number
-    status: string
     created_at: string
+    screenshot_path:string
 }
 type Bindings = {
     canzo: D1Database
@@ -53,16 +53,17 @@ type TokenPayload = {
 const adminRouter = new Hono<{Bindings:Bindings,Variables:Variables}>()
 .get("/orders",async(c)=>{
     const status = c.req.query("status")
+    if(status && status !=="Pending" ) return c.json({error:"Invalid status"},400)
         try{
                if (status === "Pending"){
-      const orders = await c.env.canzo.prepare("SELECT o.id, u.user_name,c.address,u.phone_number,o.created_at,o.status ,COUNT(b.id) AS baskets_count, SUM(b.content_weight) AS total_weight ,COUNT(CASE WHEN b.content_type = 'Plastic' THEN 1 END) AS plastic_count ,COUNT(CASE WHEN b.content_type = 'Canz' THEN 1 END) AS canz_count FROM orders o JOIN users u ON o.client_id = u.id JOIN baskets b ON o.id = b.order_id JOIN clients c ON o.client_id = c.user_id WHERE o.status = 'Pending' GROUP BY u.user_name,o.created_at,o.status,c.address,u.phone_number,o.id").all<OrderWithDetails>()
+      const orders = await c.env.canzo.prepare("SELECT o.id, u.user_name,c.address,u.phone_number,o.created_at,o.status ,COUNT(b.id) AS baskets_count, SUM(b.content_weight) AS total_weight ,COUNT(CASE WHEN b.content_type = 'Plastic' THEN 1 END) AS plastic_count ,COUNT(CASE WHEN b.content_type = 'Canz' THEN 1 END) AS canz_count FROM orders o JOIN users u ON o.client_id = u.id LEFT JOIN baskets b ON o.id = b.order_id JOIN clients c ON o.client_id = c.user_id WHERE o.status = 'Pending' GROUP BY u.user_name,o.created_at,o.status,c.address,u.phone_number,o.id").all<OrderWithDetails>()
      return c.json({orders:orders.results},200)
     }else{
       const orders = await c.env.canzo.prepare("SELECT o.id, u.user_name,c.address,u.phone_number,o.created_at,o.status ,COUNT(b.id) AS baskets_count, SUM(b.content_weight) AS total_weight ,COUNT(CASE WHEN b.content_type = 'Plastic' THEN 1 END) AS plastic_count ,COUNT(CASE WHEN b.content_type = 'Canz' THEN 1 END) AS canz_count FROM orders o JOIN users u ON o.client_id = u.id LEFT JOIN baskets b ON o.id = b.order_id JOIN clients c ON o.client_id = c.user_id GROUP BY u.user_name,o.created_at,o.status,c.address,u.phone_number,o.id").all<OrderWithDetails>()
    return c.json({orders:orders.results},200)
     }
     }catch(error){
-        console.log(`error while getting orders ${error}`)
+        console.error(`error while getting orders ${error}`)
         return c.json({error:"Internal server error"},500)
     }
 }).patch("/order/:id",async(c)=>{
@@ -119,7 +120,7 @@ await c.env.canzo.batch([
       if (fileName) {
         await c.env.CANZO_R2.delete(fileName);
       }
-        console.log(`error while updating order status ${error}`)
+        console.error(`error while updating order status ${error}`)
         return c.json({error:"Internal server error"},500)
     }
 }).get("/analytics",async(c)=>{
@@ -128,8 +129,8 @@ const [pendingOrders,completedOrders,users,totalRevenue,recentSales] = await c.e
     c.env.canzo.prepare("SELECT COUNT(*) as count FROM orders WHERE status = 'Pending'"),
     c.env.canzo.prepare("SELECT COUNT(*) as count FROM orders WHERE status = 'Completed'"),
     c.env.canzo.prepare("SELECT COUNT(*) as count FROM users WHERE user_role = 'Client'"),
-    c.env.canzo.prepare("SELECT SUM(amount) as count FROM transactions"),
-    c.env.canzo.prepare("SELECT SUM(content_weight) as count, content_type FROM sold GROUP BY content_type")
+    c.env.canzo.prepare("SELECT COALESCE(SUM(amount), 0) as count FROM transactions"),
+    c.env.canzo.prepare("SELECT COALESCE(SUM(content_weight), 0) as count, content_type FROM sold GROUP BY content_type")
 ])
 return c.json({
     pendingOrders:pendingOrders.results,
@@ -139,7 +140,7 @@ return c.json({
     recentSales:recentSales.results
 })
     }catch(error){
-        console.log(`error while getting analytics ${error}`)
+        console.error(`error while getting analytics ${error}`)
         return c.json({error:"Internal server error"},500)
     }
 }).get("/transactions",async(c)=>{
@@ -147,15 +148,15 @@ return c.json({
         const transactions = await c.env.canzo.prepare("SELECT t.id, t.amount,t.created_at,t.screenshot_path,u.user_name FROM transactions t JOIN users u ON t.client_id = u.id  ORDER BY t.created_at DESC").all<Transaction>()
         return c.json({transactions:transactions.results},200)
     }catch(error){
-        console.log(`error while getting transactions ${error}`)
+        console.error(`error while getting transactions ${error}`)
         return c.json({error:"Internal server error"},500)
     }
 }).get("/client-list",async(c)=>{
   try{
-    const users = await c.env.canzo.prepare("SELECT u.id,u.email,u.user_name,u.phone_number,c.activity_type,c.activity_name,COUNT(CASE WHEN o.status = 'Completed' THEN o.id END) as completed_orders ,COUNT(CASE WHEN o.status = 'Cancelled' THEN o.id END) as cancelled_orders,COUNT(CASE WHEN o.status = 'Pending' THEN o.id END) as pending_orders,COUNT(t.id) as transaction_count,SUM(t.amount) as total_profits FROM users u LEFT JOIN transactions t ON u.id = t.client_id JOIN clients c ON u.id = c.user_id JOIN orders o ON u.id = o.client_id GROUP BY u.id,u.email,u.user_name,u.phone_number,c.activity_type,c.activity_name").all<ClientsWithDetails>();
+    const users = await c.env.canzo.prepare("SELECT u.id,u.email,u.user_name,u.phone_number,c.activity_type,c.activity_name,COUNT(CASE WHEN o.status = 'Completed' THEN o.id END) as completed_orders ,COUNT(CASE WHEN o.status = 'Cancelled' THEN o.id END) as cancelled_orders,COUNT(CASE WHEN o.status = 'Pending' THEN o.id END) as pending_orders,COUNT(t.id) as transaction_count,COALESCE(SUM(t.amount), 0) as total_profits FROM users u LEFT JOIN transactions t ON u.id = t.client_id JOIN clients c ON u.id = c.user_id LEFT JOIN orders o ON u.id = o.client_id GROUP BY u.id,u.email,u.user_name,u.phone_number,c.activity_type,c.activity_name").all<ClientsWithDetails>();
     return c.json({users:users.results},200)
   }catch(error){
-    console.log(`error while getting clients ${error}`)
+    console.error(`error while getting clients ${error}`)
     return c.json({error:"Internal server error"},500)
   }
 })

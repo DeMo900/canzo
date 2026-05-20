@@ -52,7 +52,7 @@ await c.env.canzo.batch([
     ])
 return c.json({message:"Client registered successfully"},201)
 }catch(error){
-    console.log(`error while registering client ${error}`)
+    console.error(`error while registering client ${error}`)
     return c.json({error:"Internal server error"},500)
         }
     }).post("/login",zValidator("json",loginSchema,(result,c)=>{
@@ -74,7 +74,7 @@ const expirationTime = Math.floor(Date.now() / 1000) + (60 * 60 * 24 * 30); // 3
 const token = await sign({userId:result.id,user_role:result.user_role,exp: expirationTime}, c.env.JWT_SECRET, );
 return c.json({message:"Login successful", token,user:{id:result.id,user_role:result.user_role,user_name:result.user_name}});
 }catch(error){
-    console.log(error)
+    console.error(error)
     return c.json({error:"Internal server error"},500)
 }
     }).post("/forgot-password",zValidator("json",enterEmailSchema,(result,c)=>{
@@ -103,7 +103,7 @@ await c.env.canzo_KV.put(`otp:${email}`,otp,{expirationTtl:300})
 await sendEmail(c.env.BRAVO_API_KEY,emailData)
 return c.json({message:"OTP sent successfully"})
 }catch(error){
-    console.log(`error while sending otp ${error}`)
+    console.error(`error while sending otp ${error}`)
     return c.json({error:"Internal server error "+error},500)
 }
     }).post("/verify-otp",zValidator("json",enterOtpSchema,(result,c)=>{
@@ -122,7 +122,7 @@ const resetToken = crypto.randomUUID()
 await c.env.canzo_KV.put(`reset-token:${email}`,resetToken,{expirationTtl:2000})
 return c.json({message:"OTP verified successfully",resetToken},200)
 }catch(error){
-    console.log(`error while verifying OTP ${error}`)
+    console.error(`error while verifying OTP ${error}`)
     return c.json({error:"Internal server error"},500)
 }
     }).patch("/reset-password",zValidator("json",resetPasswordSchema,(result,c)=>{
@@ -141,7 +141,7 @@ try{
     await c.env.canzo_KV.delete(`reset-token:${email}`)
     return c.json({message:"Password reset successful"},200)
 }catch(error){
-    console.log(`error while resetting password ${error}`)
+    console.error(`error while resetting password ${error}`)
     return c.json({error:"Internal server error"},500)
 }
     })

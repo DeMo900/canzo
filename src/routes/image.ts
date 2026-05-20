@@ -7,13 +7,16 @@ const imageRouter = new Hono<{Bindings:Bindings}>()
 imageRouter.get("/image/:key",async(c)=>{
     try{
 const key = c.req.param("key")
+if (!key || key.includes("..") || !/^[\w\-\.]+$/.test(key)) {
+  return c.json({ error: "Invalid key" }, 400)
+}
 const image = await c.env.CANZO_R2.get(key)
 if(!image){
-    return c.json({error:"Image not found",image:image},404)
+    return c.json({error:"Image not found"},404)
 }
 return c.body(image.body,200,{"Content-Type": image.httpMetadata?.contentType ?? "image/jpeg"})
     }catch(error){
-        console.log(`error while getting image ${error}`)
+        console.error(`error while getting image ${error}`)
         return c.json({error:"Internal server error"},500)
     }
 })
