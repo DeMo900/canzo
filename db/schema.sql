@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT NOT NULL UNIQUE,
-    user_name TEXT NOT NULL,
+    user_name TEXT NOT NULL ,
     phone_number TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     user_role TEXT NOT NULL CHECK(user_role IN ('Client','Admin')),

@@ -1,6 +1,14 @@
 import {Hono} from 'hono';
 
 //types
+type ClientsWithDetails = {
+    id: number
+    email: string
+    user_name: string
+    phone_number: string
+    activity_type: string
+    activity_name: string
+}
 type Basket = {
     id: number
     client_id: number
@@ -142,5 +150,13 @@ return c.json({
         console.log(`error while getting transactions ${error}`)
         return c.json({error:"Internal server error"},500)
     }
+}).get("/client-list",async(c)=>{
+  try{
+    const users = await c.env.canzo.prepare("SELECT u.id,u.email,u.user_name,u.phone_number,c.activity_type,c.activity_name,COUNT(CASE WHEN o.status = 'Completed' THEN o.id END) as completed_orders ,COUNT(CASE WHEN o.status = 'Cancelled' THEN o.id END) as cancelled_orders,COUNT(CASE WHEN o.status = 'Pending' THEN o.id END) as pending_orders,COUNT(t.id) as transaction_count,SUM(t.amount) as total_profits FROM users u LEFT JOIN transactions t ON u.id = t.client_id JOIN clients c ON u.id = c.user_id JOIN orders o ON u.id = o.client_id GROUP BY u.id,u.email,u.user_name,u.phone_number,c.activity_type,c.activity_name").all<ClientsWithDetails>();
+    return c.json({users:users.results},200)
+  }catch(error){
+    console.log(`error while getting clients ${error}`)
+    return c.json({error:"Internal server error"},500)
+  }
 })
 export default adminRouter

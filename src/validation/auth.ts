@@ -1,13 +1,13 @@
 import {z} from "zod";
 
 const baseSchema = z.object({
-    username: z.string().min(1,"username is required").min(3,"user name must be at least 3 characters").max(30,"user name must be at most 30 characters"),
-    password: z.string().min(1,"password is required").min(8, 'Password must be at least 8 characters')
+    username: z.string().min(1,"username is required").min(3,"user name must be at least 3 characters").max(50,"user name must be at most 50 characters"),
+    password: z.string().min(1,"password is required").min(8, 'Password must be at least 8 characters').max(72)
     .regex(/[A-Z]/, ' password must contain at least one uppercase letter')
     .regex(/[a-z]/, 'password must contain at least one lowercase letter')
     .regex(/[0-9]/, 'password must contain at least one number'),
     confirmPassword: z.string().min(1,"confirm password is required"),
-    email: z.email("invalid email address"),
+    email: z.email("invalid email address").max(300),
     phoneNumber: z.string().min(1, 'phone number is required').regex(/^01[0125][0-9]{8}$/, 'Invalid phone number')
 })
 const refinedBaseSchema = baseSchema.refine((data) => data.password === data.confirmPassword, {
@@ -23,8 +23,8 @@ const clientSignupSchema = refinedBaseSchema.extend({
     activityName: z.string().max(50,"activity name is too long").min(1,"activity name is required"),
 })
 const loginSchema = z.object({
-    identifier: z.string().min(1,"identifier is required")  ,
-    password: z.string().min(1,"password is required")
+    identifier: z.string().min(1,"identifier is required").max(300)  ,
+    password: z.string().min(1,"password is required").max(72)
 })
 const resetPasswordSchema = baseSchema.pick({
     password:true,

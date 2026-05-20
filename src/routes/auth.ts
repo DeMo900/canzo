@@ -62,7 +62,7 @@ return c.json({message:"Client registered successfully"},201)
     }),async(c)=>{
 const {identifier,password} = c.req.valid("json")
 try{
-const result = await c.env.canzo.prepare("SELECT password_hash,user_role,id,user_name FROM users WHERE email = ?1 OR user_name = ?2").bind(identifier,identifier).first<User>()
+const result = await c.env.canzo.prepare("SELECT password_hash,user_role,id,user_name FROM users WHERE email = ?1 OR phone_number = ?1").bind(identifier).first<User>()
 if(!result){
     return c.json({error:"Invalid credentials"},401)
 }
