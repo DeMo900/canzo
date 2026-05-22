@@ -104,6 +104,17 @@ return c.json({baskets:baskets.results})
         console.error(`error while getting baskets ${error}`)
         return c.json({error:"Internal server error"},500)
     }
+}).get("/orders/count",async(c)=>{
+    try{
+        const {userId} = c.get("jwtPayload") as TokenPayload
+        const counts = await c.env.canzo.prepare(
+            "SELECT COUNT(CASE WHEN status = 'Completed' THEN 1 END) AS completed, COUNT(CASE WHEN status = 'Cancelled' THEN 1 END) AS cancelled, COUNT(CASE WHEN status = 'Pending' THEN 1 END) AS pending FROM orders WHERE client_id = ?1"
+        ).bind(userId).first<{ completed: number; cancelled: number; pending: number }>()
+        return c.json({counts})
+    }catch(error){
+        console.error(`error while getting orders count ${error}`)
+        return c.json({error:"Internal server error"},500)
+    }
 }).get("/orders/:status",async(c)=>{
     try{
 const {userId,user_role} = c.get("jwtPayload") as TokenPayload
@@ -115,8 +126,9 @@ if(!OrderStatus.includes(status)){
 if(user_role !== "Client"){
   return c.json({error:"Forbidden"}, 403)
 }
-const orders = await c.env.canzo.prepare("SELECT o.id,o.status,o.created_at ,c.address, COUNT(b.id) AS total_baskets ,SUM(b.content_weight) AS total_weight ,COUNT(CASE WHEN b.content_type = 'Plastic' THEN 1 END) AS plastic_count ,COUNT(CASE WHEN b.content_type = 'Canz' THEN 1 END) AS canz_count FROM orders o LEFT JOIN baskets b ON o.id = b.order_id JOIN clients c ON o.client_id = c.user_id WHERE o.client_id = ?1 AND status = ?2 GROUP BY o.id,o.status,o.created_at,c.address").bind(userId,status).all<Order>()
-return c.json({orders:orders.results})
+const orders = await c.env.canzo.prepare("SELECT o.id,o.status,o.created_at ,c.address, COUNT(b.id) AS total_baskets ,COALESCE(SUM(b.content_weight), 0) AS total_weight ,COUNT(CASE WHEN b.content_type = 'Plastic' THEN 1 END) AS plastic_count ,COUNT(CASE WHEN b.content_type = 'Canz' THEN 1 END) AS canz_count FROM orders o LEFT JOIN baskets b ON o.id = b.order_id JOIN clients c ON o.client_id = c.user_id WHERE o.client_id = ?1 AND o.status = ?2 GROUP BY o.id,o.status,o.created_at,c.address").bind(userId,status).all<Order>()
+  return c.json({orders:orders.results})
+
     }catch(error){
         console.error(`error while getting orders ${error}`)
         return c.json({error:"Internal server error"},500)
@@ -124,8 +136,14 @@ return c.json({orders:orders.results})
 }).get("/transactions",async(c)=>{
     try{    
 const {userId} = c.get("jwtPayload") as TokenPayload
-const transactions = await c.env.canzo.prepare("SELECT id,amount,created_at,screenshot_path FROM transactions WHERE client_id = ?1").bind(userId).all<Transaction>()
-return c.json({transactions:transactions.results})
+const allTransactions = await c.env.canzo.prepare("SELECT id,amount,created_at,screenshot_path FROM transactions WHERE client_id = ?1").bind(userId).all<Transaction>()
+const lastMonthTransactions = await c.env.canzo.prepare("SELECT id,amount,created_at,screenshot_path FROM transactions WHERE client_id = ?1 AND created_at >= date('now', '-1 month')").bind(userId).all<Transaction>()
+const lastWeekTransactions = await c.env.canzo.prepare("SELECT id,amount,created_at,screenshot_path FROM transactions WHERE client_id = ?1 AND created_at >= date('now', '-7 days')").bind(userId).all<Transaction>()
+const todayTransactions = await c.env.canzo.prepare("SELECT id,amount,created_at,screenshot_path FROM transactions WHERE client_id = ?1 AND created_at >= date('now', 'start of day')").bind(userId).all<Transaction>()
+return c.json({allTransactions:allTransactions.results,
+    lastMonthTransactions:lastMonthTransactions.results,
+    lastWeekTransactions:lastWeekTransactions.results,
+    todayTransactions:todayTransactions.results})
     }catch(error){
         console.error(`error while getting transactions ${error}`)
         return c.json({error:"Internal server error"},500)
@@ -142,6 +160,17 @@ return c.json({wallet})
     }catch(error){
         console.error(`error while getting wallet ${error}`)
         return c.json({error:"Internal server error",message:error},500)
+    }
+}).get("/profile",async(c)=>{
+    try{
+        const {userId} = c.get("jwtPayload") as TokenPayload
+        const profile = await c.env.canzo.prepare(
+            "SELECT u.email, u.user_name AS username, u.user_role, u.phone_number AS phoneNumber, c.address FROM users u JOIN clients c ON u.id = c.user_id WHERE u.id = ?1"
+        ).bind(userId).first<{ email: string, username: string, user_role: string, phoneNumber: string, address: string }>()
+        return c.json({profile})
+    }catch(error){
+        console.error(`error while getting profile ${error}`)
+        return c.json({error:"Internal server error"},500)
     }
 })
 
