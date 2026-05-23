@@ -5,6 +5,7 @@ import {jwt} from "hono/jwt"
 import clientRouter from './routes/client';
 import profileRouter from './routes/profile';
 import imageRouter from './routes/image';
+import googleRouter from "./routes/google"
 import {prettyJSON} from "hono/pretty-json"
 import verifyRole from "./middlewares/verifyRole"
 type Bindings = {
@@ -25,6 +26,7 @@ app.use("/api/admin/*",verifyRole("Admin"))
 app.route("/api/admin/", adminRouter)
 app.route("/api/admin/", profileRouter)
 app.route("/auth/", authRouter)
+app.route("/auth/", googleRouter)
 app.route("/api/client/", clientRouter)
 app.route("/api/client/", profileRouter)
 app.route("/",imageRouter)
