@@ -136,14 +136,16 @@ const orders = await c.env.canzo.prepare("SELECT o.id,o.status,o.created_at ,c.a
 }).get("/transactions",async(c)=>{
     try{    
 const {userId} = c.get("jwtPayload") as TokenPayload
-const allTransactions = await c.env.canzo.prepare("SELECT id,amount,created_at,screenshot_path FROM transactions WHERE client_id = ?1").bind(userId).all<Transaction>()
-const lastMonthTransactions = await c.env.canzo.prepare("SELECT id,amount,created_at,screenshot_path FROM transactions WHERE client_id = ?1 AND created_at >= date('now', '-1 month')").bind(userId).all<Transaction>()
-const lastWeekTransactions = await c.env.canzo.prepare("SELECT id,amount,created_at,screenshot_path FROM transactions WHERE client_id = ?1 AND created_at >= date('now', '-7 days')").bind(userId).all<Transaction>()
-const todayTransactions = await c.env.canzo.prepare("SELECT id,amount,created_at,screenshot_path FROM transactions WHERE client_id = ?1 AND created_at >= date('now', 'start of day')").bind(userId).all<Transaction>()
+const allTransactions = await c.env.canzo.prepare("SELECT t.id,t.amount,t.created_at,t.screenshot_path,u.user_name as username FROM transactions t JOIN users u ON t.client_id = u.id WHERE t.client_id = ?1").bind(userId).all<Transaction>()
+const lastMonthTransactions = await c.env.canzo.prepare("SELECT t.id,t.amount,t.created_at,t.screenshot_path,u.user_name as username FROM transactions t JOIN users u ON t.client_id = u.id WHERE t.client_id = ?1 AND t.created_at >= date('now', '-1 month')").bind(userId).all<Transaction>()
+const lastWeekTransactions = await c.env.canzo.prepare("SELECT t.id,t.amount,t.created_at,t.screenshot_path,u.user_name as username FROM transactions t JOIN users u ON t.client_id = u.id WHERE t.client_id = ?1 AND t.created_at >= date('now', '-7 days')").bind(userId).all<Transaction>()
+const todayTransactions = await c.env.canzo.prepare("SELECT t.id,t.amount,t.created_at,t.screenshot_path,u.user_name as username FROM transactions t JOIN users u ON t.client_id = u.id WHERE t.client_id = ?1 AND t.created_at >= date('now', 'start of day')").bind(userId).all<Transaction>()
+const totalEarnings = await c.env.canzo.prepare("SELECT SUM(amount) as total FROM transactions WHERE client_id = ?1").bind(userId).first<{ total: number }>()
 return c.json({allTransactions:allTransactions.results,
     lastMonthTransactions:lastMonthTransactions.results,
     lastWeekTransactions:lastWeekTransactions.results,
-    todayTransactions:todayTransactions.results})
+    todayTransactions:todayTransactions.results,
+    totalEarnings:totalEarnings})
     }catch(error){
         console.error(`error while getting transactions ${error}`)
         return c.json({error:"Internal server error"},500)
@@ -160,17 +162,6 @@ return c.json({wallet})
     }catch(error){
         console.error(`error while getting wallet ${error}`)
         return c.json({error:"Internal server error",message:error},500)
-    }
-}).get("/profile",async(c)=>{
-    try{
-        const {userId} = c.get("jwtPayload") as TokenPayload
-        const profile = await c.env.canzo.prepare(
-            "SELECT u.email, u.user_name AS username, u.user_role, u.phone_number AS phoneNumber, c.address FROM users u JOIN clients c ON u.id = c.user_id WHERE u.id = ?1"
-        ).bind(userId).first<{ email: string, username: string, user_role: string, phoneNumber: string, address: string }>()
-        return c.json({profile})
-    }catch(error){
-        console.error(`error while getting profile ${error}`)
-        return c.json({error:"Internal server error"},500)
     }
 })
 
