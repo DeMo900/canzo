@@ -27,7 +27,7 @@ profileRouter.get("/profile", async (c) => {
         const profile = await c.env.canzo.prepare(
             "SELECT u.email, u.user_name AS username, u.user_role, u.phone_number AS phoneNumber, c.address,c.activity_name as activityName,c.activity_type AS activityType FROM users u JOIN clients c ON u.id = c.user_id WHERE u.id = ?1"
         ).bind(userId).first<{ email: string, username: string, user_role: string, phoneNumber: string, address: string, activityName: string, activityType: string }>()
-        return c.json({ profile })
+        return c.json({ profile ,userId})
     } catch (error) {
         console.error(`error while getting profile ${error}`)
         return c.json({ error: "Internal server error" }, 500)
@@ -39,20 +39,27 @@ profileRouter.get("/profile", async (c) => {
     try {
         const { userId } = c.get("jwtPayload") as TokenPayload
         const body = c.req.valid("json")
-
-        const allowedKeys = ["user_name", "email", "phone_number", "address", "activity_type", "activity_name"]
+        const allowedKeys = ["username", "email", "phoneNumber", "address", "activityType", "activityName"]
+        const record = {
+            username:"user_name",
+            email:"email",
+            phoneNumber:"phone_number",
+            address:"address",
+            activityType:"activity_type",
+            activityName:"activity_name"
+        }
         const keys = Object.keys(body).filter(key => allowedKeys.includes(key) && body[key as keyof typeof body] !== undefined)
         const table = (field: string) => {
-            return field === "address" || field === "activity_type" || field === "activity_name" ? "clients" : "users"
+            return field === "address" || field === "activityType" || field === "activityName" ? "clients" : "users"
         }
         if (keys.length === 0) {
             return c.json({ error: "At least one field must be provided to update profile" }, 400)
         }
-        const uniqueFields = ["phone_number", "email"] as const;
+        const uniqueFields = ["phoneNumber", "email"] as const;
         for (const field of uniqueFields) {
             if (body[field]) {
                 const existing = await c.env.canzo
-                    .prepare(`SELECT id FROM users WHERE ${field} = ? AND id != ?`)
+                    .prepare(`SELECT id FROM users WHERE ${record[field as keyof typeof record]} = ? AND id != ?`)
                     .bind(body[field], userId)
                     .first();
                 if (existing) return c.json({ error: `${field} already in use` }, 409);
@@ -61,7 +68,7 @@ profileRouter.get("/profile", async (c) => {
         const statements = keys.map(key => {
             const tablename = table(key)
             const colName = tablename === "users" ? "id" : "user_id"
-            return c.env.canzo.prepare(`UPDATE ${tablename} SET ${key} = ? WHERE ${colName} = ?`).bind(body[key as keyof typeof body], userId)
+            return c.env.canzo.prepare(`UPDATE ${tablename} SET ${record[key as keyof typeof record]} = ? WHERE ${colName} = ?`).bind(body[key as keyof typeof body], userId)
         })
         await c.env.canzo.batch(statements)
         return c.json({ message: "Profile updated successfully" }, 200)
@@ -77,9 +84,9 @@ profileRouter.get("/profile", async (c) => {
         const body = c.req.valid("json")
         const user = await c.env.canzo.prepare("SELECT password_hash FROM users WHERE id = ?1").bind(userId).first<{ password_hash: string }>()
         if (!user) return c.json({ error: "User not found" }, 404)
-        const isPasswordValid = await bcrypt.compare(body.old_password, user.password_hash)
+        const isPasswordValid = await bcrypt.compare(body.oldPassword, user.password_hash)
         if (!isPasswordValid) return c.json({ error: "Invalid password" }, 401)
-        const password_hash = await bcrypt.hash(body.new_password, 10)
+        const password_hash = await bcrypt.hash(body.newPassword, 10)
         await c.env.canzo.prepare("UPDATE users SET password_hash = ?1, updated_at = datetime('now') WHERE id = ?2").bind(password_hash, userId).run()
         return c.json({ message: "Password updated successfully" }, 200)
     } catch (error) {

@@ -1,5 +1,7 @@
 import { Hono } from "hono";
 import { sign } from "hono/jwt";
+import { zValidator } from "@hono/zod-validator";
+import { setupProfileSchema,googleLoginSchema } from "../validation/google";
 type Bindings = {
     GOOGLE_CLIENT_ID: string;
     canzo: D1Database
@@ -14,48 +16,27 @@ type User = {
     user_role: "Client" | "Admin"
 }
 const googleRouter = new Hono<{Bindings:Bindings,Variables:User}>();
-googleRouter.post("/google", async (c) => {
+googleRouter.post("/setup-profile",
+    zValidator("json",setupProfileSchema,(result,c)=>{
+        if(!result.success){
+            return c.json({error:result.error.issues[0].message},400)
+        }
+    }),async(c)=>{
     try {
-        const {idToken} = await c.req.json()
-        const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
-        const googleUser = await res.json<{
-            sub: string;
-            email: string;
-            name: string;
-            aud: string;
-        }>();
-        if (!res.ok) return c.json({ error: "Invalid token" }, 401);
-
-  if (googleUser.aud !== c.env.GOOGLE_CLIENT_ID) {
-    return c.json({ error: "Token not intended for this app" }, 401);
-  }
-   let user = await c.env.canzo
-    .prepare("SELECT * FROM users WHERE google_id = ?")
-    .bind(googleUser.sub)
-    .first();
-
-    if(!user){
-    await c.env.canzo
-    .prepare("INSERT INTO users (google_id,name, email) VALUES (?, ?, ?)")
-    .bind(googleUser.sub,googleUser.name,googleUser.email)
-    .run();
-    
-    user = await c.env.canzo
-    .prepare("SELECT * FROM users WHERE google_id = ?")
-    .bind(googleUser.sub)
-    .first();
-    }
-const token = await sign({
-    id: user?.id,
-    user_name: user?.user_name,
-    phone_number: user?.phone_number,
-    user_role: user?.user_role,
-    
-},c.env.JWT_SECRET!);
-return c.json({token})
+        type TokenPayload = {
+    userId: number
+    user_role: string
+}
+        const {userId} = c.get("jwtPayload") as TokenPayload
+        const {address,activityType,activityName} = c.req.valid("json")
+        await c.env.canzo
+        .prepare("INSERT INTO clients (user_id,address,activity_type,activity_name) VALUES (?, ?, ?,?)")
+        .bind(userId,address,activityType,activityName)
+        .run();
+        return c.json({message:"Profile setup successful"})
     } catch (error) {
-        console.log(error)
-        return c.json({ message: "Error" })
+        console.error(`error while setting up profile ${error}`)
+        return c.json({error:"Internal server error"},500)
     }
 });
 export default googleRouter;

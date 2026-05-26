@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { clientSignupSchema,loginSchema,resetPasswordSchema,enterEmailSchema,enterOtpSchema} from "../validation/auth";
+import {googleLoginSchema,setupProfileSchema} from "../validation/google"
 import { zValidator } from "@hono/zod-validator";
 import {jwt,sign} from "hono/jwt"
 import {sendEmail,emailData} from "../servieces/sendingEmails"
@@ -26,6 +27,7 @@ type Bindings = {
     JWT_SECRET: string
     BRAVO_API_KEY: string
     canzo_KV:KVNamespace
+    GOOGLE_CLIENT_ID: string
 }
 const authRouter = new Hono<{Bindings:Bindings}>()
 
@@ -144,5 +146,47 @@ try{
     console.error(`error while resetting password ${error}`)
     return c.json({error:"Internal server error"},500)
 }
-    })
+    }).post("/google", zValidator("json",googleLoginSchema),
+    async (c) => {
+    try {
+        const {idToken} = c.req.valid("json")
+        const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
+        const googleUser = await res.json<{
+            sub: string;
+            email: string;
+            name: string;
+            aud: string;
+        }>();
+        if (!res.ok) return c.json({ error: "Invalid token" }, 401);
+
+  if (googleUser.aud !== c.env.GOOGLE_CLIENT_ID) {
+    return c.json({ error: "Token not intended for this app" }, 401);
+  }
+   let user = await c.env.canzo
+    .prepare("SELECT * FROM users WHERE google_id = ?")
+    .bind(googleUser.sub)
+    .first();
+
+    if(!user){
+    await c.env.canzo
+    .prepare("INSERT INTO users (google_id,user_name, email) VALUES (?, ?, ?)")
+    .bind(googleUser.sub,googleUser.name,googleUser.email)
+    .run();
+    
+    user = await c.env.canzo
+    .prepare("SELECT * FROM users WHERE google_id = ?")
+    .bind(googleUser.sub)
+    .first();
+    }
+const token = await sign({
+    userId: user?.id,
+    user_role: user?.user_role,
+    
+},c.env.JWT_SECRET!);
+return c.json({token})
+    } catch (error) {
+        console.log(error)
+        return c.json({ message: "Error" })
+    }
+})
 export default authRouter 
