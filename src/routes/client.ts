@@ -2,7 +2,19 @@ import { Hono } from "hono";
 import { JwtVariables } from "hono/jwt";
 import {zValidator} from "@hono/zod-validator"
 import {arrayBasketsSchema} from "../validation/client"
-
+//client schema
+type Client = {
+    user_id: number
+    activity_type: string
+    activity_name: string
+}
+//pricing schema
+type Pricing = {
+    id: number
+    material: string
+    activity_type: string
+    price_per_kg: number
+}
 //baskets
 type Basket = {
     id: number
@@ -11,6 +23,7 @@ type Basket = {
     content_weight: number
     order_id: number
     is_full: boolean
+    price: number
 }
 //binding
 type Bindings = {
@@ -55,11 +68,32 @@ clientRouter.post("/baskets",zValidator("json",arrayBasketsSchema,(result,c)=>{
 }),async(c)=>{
     try{
  const {userId} = c.get("jwtPayload") as TokenPayload
- const baskets = c.req.valid("json")
+  const unMappedBaskets = c.req.valid("json")
+  const user = await c.env.canzo.prepare("SELECT activity_type FROM clients WHERE user_id = ?1").bind(userId).first<Client>()
+  if(!user){
+     return c.json({error:"Client not found"},404)
+  }
+ const baskets = (await Promise.all(
+  unMappedBaskets.map(async (b) => {
+    const pricePerKg = await c.env.canzo.prepare("SELECT price_per_kg FROM pricing WHERE material = ?1 AND activity_type = ?2")
+      .bind(b.content_type, user.activity_type)
+      .first<Pricing>();
+
+    if (!pricePerKg) throw new Error("INVALID_MATERIAL");
+
+    const totalPrice = pricePerKg.price_per_kg * b.content_weight;
+
+    return Array.from({ length: b.amount }, () => ({
+      content_type: b.content_type,
+      content_weight: b.content_weight,
+      price: totalPrice,
+    }));
+  })
+)).flat();
    await c.env.canzo.batch([
     ...baskets.map(b =>
-        c.env.canzo.prepare("INSERT INTO baskets (client_id, content_type, content_weight, is_full) VALUES (?1, ?2, ?3, false)")
-            .bind(userId, b.content_type, b.content_weight)
+        c.env.canzo.prepare("INSERT INTO baskets (client_id, content_type, content_weight, is_full, price) VALUES (?1, ?2, ?3, false, ?4)")
+            .bind(userId, b.content_type, b.content_weight,b.price)
     )
 ])
 return c.json({ message: "Baskets added successfully" }, 201);
@@ -74,15 +108,27 @@ const basketId = c.req.param("id")
 const isOrderExist = 
 await c.env.canzo.prepare("SELECT id,client_id FROM orders WHERE client_id = ?1 AND status = 'Pending'").bind(userId).first<Order>()
 if(isOrderExist){
-const updateBasketWithOrderResult= await c.env.canzo.prepare("UPDATE baskets SET is_full = 1 , order_id = ?1, updated_at = datetime('now') WHERE id = ?2 AND client_id = ?3").bind(isOrderExist.id,basketId,userId).run()
+const [updateBasketWithOrderResult,updateOrderResult]= await c.env.canzo.batch([
+ c.env.canzo.prepare(
+  "UPDATE baskets SET is_full = 1, order_id = ?1, updated_at = datetime('now') WHERE id = ?2 AND client_id = ?3"
+).bind(isOrderExist.id, basketId, userId),
+
+c.env.canzo.prepare(
+  "UPDATE orders SET price = price + (SELECT price FROM baskets WHERE id = ?1 AND client_id = ?2) WHERE id = ?3 AND client_id = ?2"
+).bind(basketId, userId, isOrderExist.id)
+])
  if(updateBasketWithOrderResult.meta.changes === 0 ){
    return c.json({error:"Failed to set basket to full or basket not found"},400)
  }
 return c.json({message:"Basket filled successfully"},200)
 }
 const [insertrResult,updateBasketWithNoOrderResult]= await c.env.canzo.batch([
- c.env.canzo.prepare("INSERT INTO orders (client_id,status) VALUES (?1,'Pending')").bind(userId),
- c.env.canzo.prepare("UPDATE baskets SET is_full = 1 , order_id = 2, updated_at = datetime('now') WHERE id = ?1 AND client_id = ?2").bind(basketId,userId)
+ c.env.canzo.prepare(
+  "INSERT INTO orders (client_id, status, price) VALUES (?1, 'Pending', (SELECT price FROM baskets WHERE id = ?2 AND client_id = ?1))"
+).bind(userId, basketId),
+c.env.canzo.prepare(
+  "UPDATE baskets SET is_full = 1, order_id = last_insert_rowid(), updated_at = datetime('now') WHERE id = ?1 AND client_id = ?2"
+).bind(basketId, userId)
 ])
 if(updateBasketWithNoOrderResult.meta.changes === 0){
 return c.json({error:"Failed to set basket to full or basket not found"},400)
@@ -98,7 +144,7 @@ const {userId,user_role} = c.get("jwtPayload") as TokenPayload
 if(user_role !== "Client"){
   return c.json({error:"Forbidden"}, 403)
 }
-const baskets = await c.env.canzo.prepare("SELECT id,content_type,content_weight,is_full FROM baskets WHERE client_id = ?1").bind(userId).all<Basket>()
+const baskets = await c.env.canzo.prepare("SELECT id,content_type,content_weight,is_full,price FROM baskets WHERE client_id = ?1").bind(userId).all<Basket>()
 return c.json({baskets:baskets.results})
     }catch(error){
         console.error(`error while getting baskets ${error}`)
@@ -150,7 +196,10 @@ return c.json({allTransactions:allTransactions.results,
         console.error(`error while getting transactions ${error}`)
         return c.json({error:"Internal server error"},500)
     }
-}).get("/wallet",async(c)=>{
+ })   
+/*
+
+.get("/wallet",async(c)=>{
     try{
 const {userId} = c.get("jwtPayload") as TokenPayload
 let wallet = await c.env.canzo.prepare("SELECT balance FROM wallets WHERE user_id = ?1").bind(userId).first<Wallet>()
@@ -164,5 +213,6 @@ return c.json({wallet})
         return c.json({error:"Internal server error",message:error},500)
     }
 })
-
+*/
 export default clientRouter
+

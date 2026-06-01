@@ -1,11 +1,11 @@
-import { Resend } from 'resend';
+
 
 type emailData = {
   to: string;
   subject: string;
   html: string;
 }
-async function sendEmail(apiKey: string, data: emailData) {
+async function sendEmail(apiKey: string, data: emailData,senderEmail:string) {
   const response = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
     headers: {
@@ -13,7 +13,7 @@ async function sendEmail(apiKey: string, data: emailData) {
       "api-key": apiKey
     },
     body: JSON.stringify({
-      sender: { name: "Canzo", email: "dodoadam893@gmail.com" },
+      sender: { name: "Canzo", email: senderEmail },
       to: [{ email: data.to }],
       subject: data.subject,
       htmlContent: data.html

@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS baskets (
     order_id INTEGER,
     client_id INTEGER NOT NULL,
     is_full BOOLEAN NOT NULL DEFAULT 0,
+    price REAL NOT NULL,
     created_at DATETIME DEFAULT (datetime('now')),
     updated_at DATETIME DEFAULT (datetime('now')),
     FOREIGN KEY (client_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -45,6 +46,7 @@ CREATE TABlE IF NOT EXISTS orders (
 id INTEGER PRIMARY KEY AUTOINCREMENT,
 client_id INTEGER NOT NULL,
 status TEXT NOT NULL CHECK(status IN ('Pending', 'Completed', 'Cancelled')),
+price REAL NOT NULL,
 created_at DATETIME DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS wallets (
@@ -62,3 +64,12 @@ CREATE TABLE IF NOT EXISTS sold (
     total_price REAL NOT NULL,
     created_at DATETIME DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS pricing (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    material TEXT NOT NULL CHECK (material IN ('Plastic', 'Canz')),
+    activity_type TEXT NOT NULL CHECK (activity_type IN ('Wedding hall', 'Cafe', 'Club', 'Restaurant')),
+    price_per_kg REAL NOT NULL,
+    UNIQUE (material, activity_type)
+);
+

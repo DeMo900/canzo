@@ -15,6 +15,7 @@ type Basket = {
     content_type: string
     content_weight: number
     order_id: number
+    price: number
     is_full: boolean
 }
 type OrderWithDetails = {
@@ -56,10 +57,10 @@ const adminRouter = new Hono<{Bindings:Bindings,Variables:Variables}>()
     if(status && status !=="Pending" ) return c.json({error:"Invalid status"},400)
         try{
                if (status === "Pending"){
-      const orders = await c.env.canzo.prepare("SELECT o.id, u.user_name,c.address,u.phone_number,o.created_at,o.status ,COUNT(b.id) AS baskets_count, SUM(b.content_weight) AS total_weight ,COUNT(CASE WHEN b.content_type = 'Plastic' THEN 1 END) AS plastic_count ,COUNT(CASE WHEN b.content_type = 'Canz' THEN 1 END) AS canz_count FROM orders o JOIN users u ON o.client_id = u.id LEFT JOIN baskets b ON o.id = b.order_id JOIN clients c ON o.client_id = c.user_id WHERE o.status = 'Pending' GROUP BY u.user_name,o.created_at,o.status,c.address,u.phone_number,o.id").all<OrderWithDetails>()
+      const orders = await c.env.canzo.prepare("SELECT o.id,o.price, u.user_name,c.address,u.phone_number,o.created_at,o.status ,COUNT(b.id) AS baskets_count, SUM(b.content_weight) AS total_weight ,COUNT(CASE WHEN b.content_type = 'Plastic' THEN 1 END) AS plastic_count ,COUNT(CASE WHEN b.content_type = 'Canz' THEN 1 END) AS canz_count FROM orders o JOIN users u ON o.client_id = u.id LEFT JOIN baskets b ON o.id = b.order_id JOIN clients c ON o.client_id = c.user_id WHERE o.status = 'Pending' GROUP BY u.user_name,o.created_at,o.status,c.address,u.phone_number,o.id,o.price").all<OrderWithDetails>()
      return c.json({orders:orders.results},200)
     }else{
-      const orders = await c.env.canzo.prepare("SELECT o.id, u.user_name,c.address,u.phone_number,o.created_at,o.status ,COUNT(b.id) AS baskets_count, SUM(b.content_weight) AS total_weight ,COUNT(CASE WHEN b.content_type = 'Plastic' THEN 1 END) AS plastic_count ,COUNT(CASE WHEN b.content_type = 'Canz' THEN 1 END) AS canz_count FROM orders o JOIN users u ON o.client_id = u.id LEFT JOIN baskets b ON o.id = b.order_id JOIN clients c ON o.client_id = c.user_id GROUP BY u.user_name,o.created_at,o.status,c.address,u.phone_number,o.id").all<OrderWithDetails>()
+      const orders = await c.env.canzo.prepare("SELECT o.id,o.price, u.user_name,c.address,u.phone_number,o.created_at,o.status ,COUNT(b.id) AS baskets_count, SUM(b.content_weight) AS total_weight ,COUNT(CASE WHEN b.content_type = 'Plastic' THEN 1 END) AS plastic_count ,COUNT(CASE WHEN b.content_type = 'Canz' THEN 1 END) AS canz_count FROM orders o JOIN users u ON o.client_id = u.id LEFT JOIN baskets b ON o.id = b.order_id JOIN clients c ON o.client_id = c.user_id GROUP BY u.user_name,o.created_at,o.status,c.address,u.phone_number,o.id,o.price").all<OrderWithDetails>()
    return c.json({orders:orders.results},200)
     }
     }catch(error){
@@ -99,15 +100,15 @@ if (!order || order.status !== "Pending" ) return c.json({ error: "Order not fou
         await c.env.CANZO_R2.put(fileName,image,{
             "httpMetadata":{contentType:image.type}
         })
-const getBaskets = await c.env.canzo.prepare("SELECT id,content_type,content_weight FROM baskets WHERE order_id = ?1").bind(id).all<Basket>();
+const getBaskets = await c.env.canzo.prepare("SELECT id,content_type,content_weight,price FROM baskets WHERE order_id = ?1").bind(id).all<Basket>();
 
 const mappedBaskets = getBaskets.results.map((basket: Basket) =>
-  c.env.canzo.prepare("INSERT INTO sold (content_type,content_weight,total_price) VALUES(?1,?2,300)").bind(basket.content_type, basket.content_weight)
+  c.env.canzo.prepare("INSERT INTO sold (content_type,content_weight,total_price) VALUES(?1,?2,?3)").bind(basket.content_type, basket.content_weight,basket.price)
 );
 
 await c.env.canzo.batch([
   c.env.canzo.prepare("UPDATE orders SET status = ?1 WHERE id = ?2").bind(status, id),
-  c.env.canzo.prepare("INSERT INTO transactions (client_id,screenshot_path,amount) VALUES((SELECT client_id FROM orders WHERE id = ?1),?2,300)").bind(id, fileName),
+  c.env.canzo.prepare("INSERT INTO transactions (client_id, screenshot_path, amount) VALUES ((SELECT client_id FROM orders WHERE id = ?1), ?2, (SELECT price FROM orders WHERE id = ?1))").bind(id, fileName),
   ...mappedBaskets,
   c.env.canzo.prepare("UPDATE baskets SET is_full = 0, order_id = NULL, updated_at = datetime('now') WHERE order_id = ?1").bind(id),
 ]);
@@ -125,20 +126,21 @@ await c.env.canzo.batch([
     }
 }).get("/analytics",async(c)=>{
     try{
-const [pendingOrders,completedOrders,users,totalRevenue,recentSales] = await c.env.canzo.batch([
-    c.env.canzo.prepare("SELECT COUNT(*) as count FROM orders WHERE status = 'Pending'"),
-    c.env.canzo.prepare("SELECT COUNT(*) as count FROM orders WHERE status = 'Completed'"),
-    c.env.canzo.prepare("SELECT COUNT(*) as count FROM users WHERE user_role = 'Client'"),
-    c.env.canzo.prepare("SELECT COALESCE(SUM(amount), 0) as count FROM transactions"),
-    c.env.canzo.prepare("SELECT COALESCE(SUM(content_weight), 0) as count, content_type FROM sold GROUP BY content_type")
-])
-return c.json({
-    pendingOrders:pendingOrders.results,
-    completedOrders:completedOrders.results,
-    users:users.results,
-    totalRevenue:totalRevenue.results,
-    recentSales:recentSales.results
-})
+      const batchReq = [
+        c.env.canzo.prepare("SELECT STRFTIME('%w',created_at) as day, COUNT(*) as total_packages,SUM(total_price) as total_profit FROM sold WHERE created_at >= date('now','-7 days') GROUP BY STRFTIME('%w',created_at) "),
+        c.env.canzo.prepare("SELECT COALESCE( SUM(CASE WHEN content_type = 'Plastic' THEN content_weight END),0) as plastic_weight , COALESCE(SUM(CASE WHEN content_type = 'Canz' THEN content_weight END),0) as canz_weight FROM sold WHERE created_at >= date('now','-7 days')"),
+        c.env.canzo.prepare("SELECT COALESCE(SUM(total_price),0) as total_profit FROM sold WHERE created_at >= date('now','-7 days')")
+      ]
+      const [soldPerDay,materialsWeightSoldThisWeek,profitsThisWeek] = await c.env.canzo.batch(batchReq)
+      const dayOrder = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"]
+      const daysSoldPerDay = soldPerDay.results.map((sold:any)=>{
+        return {
+          day:dayOrder[Number(sold.day)],
+          total_packages:sold.total_packages,
+          total_profit:sold.total_profit
+        }
+      })
+return c.json({chart:daysSoldPerDay,materialsWeightSoldThisWeek:materialsWeightSoldThisWeek.results,profitsThisWeek:profitsThisWeek.results},200)
     }catch(error){
         console.error(`error while getting analytics ${error}`)
         return c.json({error:"Internal server error"},500)
@@ -159,5 +161,26 @@ return c.json({
     console.error(`error while getting clients ${error}`)
     return c.json({error:"Internal server error"},500)
   }
+}).get("/stats",async(c)=>{
+    try{
+        const [clientsResult, ordersResult, spendsResult] = await c.env.canzo.batch([
+            c.env.canzo.prepare("SELECT COUNT(*) as count FROM users WHERE user_role = 'Client'"),
+            c.env.canzo.prepare("SELECT COUNT(*) as count FROM orders WHERE status = 'Completed'"),
+            c.env.canzo.prepare("SELECT COALESCE(SUM(amount), 0) as total FROM transactions")
+        ]);
+
+        const clientCount = (clientsResult.results[0] as { count: number } | undefined)?.count ?? 0;
+        const completedOrdersCount = (ordersResult.results[0] as { count: number } | undefined)?.count ?? 0;
+        const totalSpends = (spendsResult.results[0] as { total: number } | undefined)?.total ?? 0;
+
+        return c.json({
+            clientCount,
+            completedOrdersCount,
+            totalSpends
+        },200)
+    }catch(error){
+        console.error(`error while getting stats ${error}`)
+        return c.json({error:"Internal server error"},500)
+    }
 })
 export default adminRouter

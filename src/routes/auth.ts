@@ -26,6 +26,7 @@ type Bindings = {
     canzo: D1Database
     JWT_SECRET: string
     BRAVO_API_KEY: string
+    SENDER_EMAIL:string
     canzo_KV:KVNamespace
     GOOGLE_CLIENT_ID: string
 }
@@ -102,7 +103,7 @@ const emailData: emailData = {
 }
 await c.env.canzo_KV.delete(`otp:${email}`)
 await c.env.canzo_KV.put(`otp:${email}`,otp,{expirationTtl:300})
-await sendEmail(c.env.BRAVO_API_KEY,emailData)
+await sendEmail(c.env.BRAVO_API_KEY,emailData,c.env.SENDER_EMAIL)
 return c.json({message:"OTP sent successfully"})
 }catch(error){
     console.error(`error while sending otp ${error}`)
