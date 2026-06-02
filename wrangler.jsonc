@@ -18,10 +18,7 @@
   ],
 
   "vars": {
-    "JWT_SECRET": "canzo_dev_secret",
-    "GOOGLE_CLIENT_ID": "your-google-client-id",
-    "BRAVO_API_KEY": "your-bravo-api-key",
-    "SENDER_EMAIL": "your-sender-email"
+   
   },
 
   "kv_namespaces": [

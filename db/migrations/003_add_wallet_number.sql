@@ -1,1 +1,1 @@
-ALTER TABLE withdrawal_requests ADD COLUMN wallet_number TEXT;ش
+ALTER TABLE withdrawal_requests ADD COLUMN wallet_number TEXT;
