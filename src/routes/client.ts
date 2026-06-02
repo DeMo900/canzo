@@ -61,6 +61,7 @@ type TokenPayload = {
     user_role: string
 }
 const clientRouter = new Hono<{Bindings:Bindings,Variables:Variables}>()
+
 clientRouter.post("/baskets",zValidator("json",arrayBasketsSchema,(result,c)=>{
     if(!result.success){
         return c.json({error:result.error.issues[0].message},400)
@@ -73,23 +74,31 @@ clientRouter.post("/baskets",zValidator("json",arrayBasketsSchema,(result,c)=>{
   if(!user){
      return c.json({error:"Client not found"},404)
   }
- const baskets = (await Promise.all(
-  unMappedBaskets.map(async (b) => {
-    const pricePerKg = await c.env.canzo.prepare("SELECT price_per_kg FROM pricing WHERE material = ?1 AND activity_type = ?2")
+ const baskets: { content_type: string; content_weight: number; price: number }[] = []
+  for (const b of unMappedBaskets) {
+    const pricePerKg = await c.env.canzo
+      .prepare("SELECT price_per_kg FROM pricing WHERE material = ?1 AND activity_type = ?2")
       .bind(b.content_type, user.activity_type)
-      .first<Pricing>();
+      .first<Pricing>()
 
-    if (!pricePerKg) throw new Error("INVALID_MATERIAL");
+    if (!pricePerKg) {
+      return c.json(
+        {
+          error: `No pricing for material "${b.content_type}" and activity "${user.activity_type}". Run db/seed-pricing.sql on your D1 database.`,
+        },
+        400
+      )
+    }
 
-    const totalPrice = pricePerKg.price_per_kg * b.content_weight;
-
-    return Array.from({ length: b.amount }, () => ({
-      content_type: b.content_type,
-      content_weight: b.content_weight,
-      price: totalPrice,
-    }));
-  })
-)).flat();
+    const totalPrice = pricePerKg.price_per_kg * b.content_weight
+    for (let i = 0; i < b.amount; i++) {
+      baskets.push({
+        content_type: b.content_type,
+        content_weight: b.content_weight,
+        price: totalPrice,
+      })
+    }
+  }
    await c.env.canzo.batch([
     ...baskets.map(b =>
         c.env.canzo.prepare("INSERT INTO baskets (client_id, content_type, content_weight, is_full, price) VALUES (?1, ?2, ?3, false, ?4)")

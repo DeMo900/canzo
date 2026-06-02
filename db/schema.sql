@@ -35,12 +35,26 @@ CREATE TABLE IF NOT EXISTS baskets (
 
 CREATE TABLE IF NOT EXISTS transactions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+
     client_id INTEGER NOT NULL,
-    screenshot_path TEXT,
+    admin_id INTEGER,
+
     amount REAL NOT NULL,
+
+    status TEXT NOT NULL DEFAULT 'Pending'
+        CHECK(status IN ('Pending','Approved','Rejected')),
+
+    screenshot_path TEXT,
+
+    note TEXT,
+
+    approved_at DATETIME,
+
     created_at DATETIME DEFAULT (datetime('now')),
     updated_at DATETIME DEFAULT (datetime('now')),
-    FOREIGN KEY(client_id) REFERENCES users(id) ON DELETE CASCADE
+
+    FOREIGN KEY(client_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY(admin_id) REFERENCES users(id) ON DELETE SET NULL
 );
 CREATE TABlE IF NOT EXISTS orders (
 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,11 +65,33 @@ created_at DATETIME DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS wallets (
     user_id INTEGER PRIMARY KEY,
-    balance REAL NOT NULL DEFAULT 0,
+    balance REAL NOT NULL DEFAULT 0 CHECK(balance >= 0),
+    pending_balance REAL NOT NULL DEFAULT 0 CHECK(pending_balance >= 0),
     created_at DATETIME DEFAULT (datetime('now')),
     updated_at DATETIME DEFAULT (datetime('now')),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS withdrawal_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    amount REAL NOT NULL CHECK(amount > 0),
+    status TEXT NOT NULL DEFAULT 'Pending'
+        CHECK(status IN ('Pending','Approved','Rejected')),
+    admin_id INTEGER,
+    screenshot_path TEXT,
+    wallet_number TEXT,
+    created_at DATETIME DEFAULT (datetime('now')),
+    updated_at DATETIME DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (admin_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_withdrawal_requests_user_status
+    ON withdrawal_requests(user_id, status);
+
+CREATE INDEX IF NOT EXISTS idx_withdrawal_requests_status
+    ON withdrawal_requests(status);
 
 CREATE TABLE IF NOT EXISTS sold (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

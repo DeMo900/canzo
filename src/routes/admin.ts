@@ -1,4 +1,5 @@
 import {Hono} from 'hono';
+import { creditWallet } from '../services/wallet';
 
 //types
 type ClientsWithDetails = {
@@ -68,59 +69,56 @@ const adminRouter = new Hono<{Bindings:Bindings,Variables:Variables}>()
         return c.json({error:"Internal server error"},500)
     }
 }).patch("/order/:id",async(c)=>{
-    let fileName: string | null = null;
     try{
       const id = Number(c.req.param("id"))
       if(isNaN(id)) return c.json({error:"Invalid order id"},400)
-       const body = await c.req.parseBody()
-      const image = body.image as File 
-      const status = body.status as string
-      if( status === "Completed" || status === "Cancelled"){
-        const order = await c.env.canzo.prepare("SELECT id,status FROM orders WHERE id = ?1").bind(id).first<{id:number,status:string}>();
-if (!order || order.status !== "Pending" ) return c.json({ error: "Order not found or already updated" }, 404);
-        if (status === "Cancelled"){
-     await c.env.canzo.batch([
-        c.env.canzo.prepare("UPDATE orders SET status = ?1 WHERE id = ?2").bind(status,id),
-        c.env.canzo.prepare("UPDATE baskets SET is_full = 0 , order_id = NULL, updated_at = datetime('now') WHERE order_id = ?1").bind(id)
-     ])
-    return c.json({message:"Order cancelled successfully"},200)
-    }
-    if(status === "Completed"){
-        if (!image || !(image instanceof File)) {
-            return c.json({error:"Invalid image type"},400)
-        }
-        if(image.size > 2 * 1024 * 1024){
-            return c.json({error:"Image size is greater than 2MB"},400)
-        }
-        const allowedTypes = ["image/jpeg","image/png","image/webp"]
-        if(!allowedTypes.includes(image.type)){
-            return c.json({error:"Invalid image type"},400)
-        }
-        fileName = `${Date.now()}-${image.name}`
-        await c.env.CANZO_R2.put(fileName,image,{
-            "httpMetadata":{contentType:image.type}
-        })
-const getBaskets = await c.env.canzo.prepare("SELECT id,content_type,content_weight,price FROM baskets WHERE order_id = ?1").bind(id).all<Basket>();
+      
+      let status: string | undefined;
+      const contentType = c.req.header("content-type") || "";
+      if (contentType.includes("application/json")) {
+          const json = await c.req.json();
+          status = json.status;
+      } else {
+          const body = await c.req.parseBody();
+          status = body.status as string;
+      }
 
-const mappedBaskets = getBaskets.results.map((basket: Basket) =>
-  c.env.canzo.prepare("INSERT INTO sold (content_type,content_weight,total_price) VALUES(?1,?2,?3)").bind(basket.content_type, basket.content_weight,basket.price)
-);
+      if(!status || (status !== "Completed" && status !== "Cancelled")){
+          return c.json({error:"Invalid status"},400)
+      }
 
-await c.env.canzo.batch([
-  c.env.canzo.prepare("UPDATE orders SET status = ?1 WHERE id = ?2").bind(status, id),
-  c.env.canzo.prepare("INSERT INTO transactions (client_id, screenshot_path, amount) VALUES ((SELECT client_id FROM orders WHERE id = ?1), ?2, (SELECT price FROM orders WHERE id = ?1))").bind(id, fileName),
-  ...mappedBaskets,
-  c.env.canzo.prepare("UPDATE baskets SET is_full = 0, order_id = NULL, updated_at = datetime('now') WHERE order_id = ?1").bind(id),
-]);
-        return c.json({message:"Order updated successfully"},200)   
-    }
-      }else{
-        return c.json({error:"Invalid status"},400)
+      const order = await c.env.canzo.prepare("SELECT id,status FROM orders WHERE id = ?1").bind(id).first<{id:number,status:string}>();
+      if (!order || order.status !== "Pending" ) {
+          return c.json({ error: "Order not found or already updated" }, 404);
+      }
+
+      if (status === "Cancelled"){
+          await c.env.canzo.batch([
+              c.env.canzo.prepare("UPDATE orders SET status = ?1 WHERE id = ?2").bind(status,id),
+              c.env.canzo.prepare("UPDATE baskets SET is_full = 0 , order_id = NULL, updated_at = datetime('now') WHERE order_id = ?1").bind(id)
+          ])
+          return c.json({message:"Order cancelled successfully"},200)
+      }
+
+      if(status === "Completed"){
+          const getBaskets = await c.env.canzo.prepare("SELECT id,content_type,content_weight,price FROM baskets WHERE order_id = ?1").bind(id).all<Basket>();
+          const orderRow = await c.env.canzo.prepare("SELECT client_id, price FROM orders WHERE id = ?1").bind(id).first<{ client_id: number; price: number }>();
+          if (!orderRow) return c.json({ error: "Order not found" }, 404);
+
+          const mappedBaskets = getBaskets.results.map((basket: Basket) =>
+              c.env.canzo.prepare("INSERT INTO sold (content_type,content_weight,total_price) VALUES(?1,?2,?3)").bind(basket.content_type, basket.content_weight,basket.price)
+          );
+
+          await c.env.canzo.batch([
+              c.env.canzo.prepare("UPDATE orders SET status = ?1 WHERE id = ?2").bind(status, id),
+              c.env.canzo.prepare("INSERT INTO transactions (client_id, screenshot_path, amount, status, note, approved_at) VALUES (?1, NULL, ?2, 'Approved', 'order_payout', datetime('now'))").bind(orderRow.client_id, orderRow.price),
+              ...mappedBaskets,
+              c.env.canzo.prepare("UPDATE baskets SET is_full = 0, order_id = NULL, updated_at = datetime('now') WHERE order_id = ?1").bind(id),
+          ]);
+          await creditWallet(c.env.canzo, orderRow.client_id, orderRow.price);
+          return c.json({message:"Order updated successfully"},200)   
       }
     }catch(error){
-      if (fileName) {
-        await c.env.CANZO_R2.delete(fileName);
-      }
         console.error(`error while updating order status ${error}`)
         return c.json({error:"Internal server error"},500)
     }
