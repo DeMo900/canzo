@@ -95,10 +95,12 @@ CREATE INDEX IF NOT EXISTS idx_withdrawal_requests_status
 
 CREATE TABLE IF NOT EXISTS sold (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id INTEGER NOT NULL,
     content_type TEXT NOT NULL CHECK (content_type IN ('Plastic','Canz')),
     content_weight REAL NOT NULL,
     total_price REAL NOT NULL,
-    created_at DATETIME DEFAULT (datetime('now'))
+    created_at DATETIME DEFAULT (datetime('now')),
+    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS pricing (

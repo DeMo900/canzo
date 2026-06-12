@@ -106,7 +106,7 @@ const adminRouter = new Hono<{Bindings:Bindings,Variables:Variables}>()
           if (!orderRow) return c.json({ error: "Order not found" }, 404);
 
           const mappedBaskets = getBaskets.results.map((basket: Basket) =>
-              c.env.canzo.prepare("INSERT INTO sold (content_type,content_weight,total_price) VALUES(?1,?2,?3)").bind(basket.content_type, basket.content_weight,basket.price)
+              c.env.canzo.prepare("INSERT INTO sold (content_type,content_weight,total_price,order_id) VALUES(?1,?2,?3,?4)").bind(basket.content_type, basket.content_weight,basket.price,id)
           );
 
           await c.env.canzo.batch([

@@ -8,7 +8,6 @@ import imageRouter from './routes/image';
 import googleRouter from "./routes/google"
 import { clientWithdrawRouter, adminWithdrawRouter } from "./routes/withdrawal"
 import {prettyJSON} from "hono/pretty-json"
-import { html } from 'hono/html'
 import verifyRole from "./middlewares/verifyRole"
 type Bindings = {
     JWT_SECRET: string
@@ -26,7 +25,7 @@ app.use("/api/*",(c,next)=>{
   return jwtMiddleware(c, next)
 })
 app.use("/api/client/*",verifyRole("Client"))
-app.use("/api/admin/*",verifyRole("Admin"))
+//app.use("/api/admin/*",verifyRole("Admin"))
 
 app.route("/api/admin/", adminRouter)
 app.route("/api/admin/", profileRouter)

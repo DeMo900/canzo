@@ -149,10 +149,7 @@ return c.json({message:"Basket filled successfully"},200)
     }
 }).get("/baskets",async(c)=>{
     try{
-const {userId,user_role} = c.get("jwtPayload") as TokenPayload
-if(user_role !== "Client"){
-  return c.json({error:"Forbidden"}, 403)
-}
+const {userId} = c.get("jwtPayload") as TokenPayload
 const baskets = await c.env.canzo.prepare("SELECT id,content_type,content_weight,is_full,price FROM baskets WHERE client_id = ?1").bind(userId).all<Basket>()
 return c.json({baskets:baskets.results})
     }catch(error){
@@ -178,12 +175,52 @@ const OrderStatus = ["Pending","Completed","Cancelled"]
 if(!OrderStatus.includes(status)){
     return c.json({error:"Invalid status"},400)
 }
-if(user_role !== "Client"){
-  return c.json({error:"Forbidden"}, 403)
-}
-const orders = await c.env.canzo.prepare("SELECT o.id,o.status,o.created_at ,c.address, COUNT(b.id) AS total_baskets ,COALESCE(SUM(b.content_weight), 0) AS total_weight ,COUNT(CASE WHEN b.content_type = 'Plastic' THEN 1 END) AS plastic_count ,COUNT(CASE WHEN b.content_type = 'Canz' THEN 1 END) AS canz_count FROM orders o LEFT JOIN baskets b ON o.id = b.order_id JOIN clients c ON o.client_id = c.user_id WHERE o.client_id = ?1 AND o.status = ?2 GROUP BY o.id,o.status,o.created_at,c.address").bind(userId,status).all<Order>()
-  return c.json({orders:orders.results})
+let orders;
+if (status === "Pending") {
+  orders = await c.env.canzo.prepare(`
+    SELECT o.id, o.price, o.status, o.created_at, c.address,
+      COUNT(b.id) AS total_baskets,
+      COUNT(CASE WHEN b.content_type = 'Plastic' THEN 1 END) AS plastic_count,
+      COUNT(CASE WHEN b.content_type = 'Canz' THEN 1 END) AS canz_count,
+      COALESCE(SUM(b.content_weight), 0) AS total_weight
+    FROM orders o
+    LEFT JOIN baskets b ON o.id = b.order_id
+    JOIN clients c ON o.client_id = c.user_id
+    WHERE o.client_id = ?1 AND o.status = 'Pending'
+    GROUP BY o.id, o.price, o.status, o.created_at, c.address
+  `).bind(userId).all()
 
+} else if (status === "Completed") {
+   const completedOrders = await c.env.canzo.prepare(`
+    SELECT o.id, o.price, o.status, o.created_at, c.address
+    FROM orders o
+    JOIN clients c ON o.client_id = c.user_id
+    WHERE o.client_id = ?1 AND o.status = 'Completed'
+  `).bind(userId).all<any>()
+
+  const ordersWithItems = await Promise.all(
+    completedOrders.results.map(async (order) => {
+      const items = await c.env.canzo.prepare(`
+        SELECT content_type, content_weight, total_price
+        FROM sold
+        WHERE order_id = ?1
+      `).bind(order.id).all<any>()
+
+      return { ...order, sold_items: items.results }
+    })
+  )
+
+  orders = ordersWithItems
+  return c.json({orders})
+} else {
+  orders = await c.env.canzo.prepare(`
+    SELECT o.id, o.price, o.status, o.created_at, c.address
+    FROM orders o
+    JOIN clients c ON o.client_id = c.user_id
+    WHERE o.client_id = ?1 AND o.status = 'Cancelled'
+  `).bind(userId).all()
+}
+return c.json({orders:orders.results})
     }catch(error){
         console.error(`error while getting orders ${error}`)
         return c.json({error:"Internal server error"},500)
@@ -205,13 +242,10 @@ return c.json({allTransactions:allTransactions.results,
         console.error(`error while getting transactions ${error}`)
         return c.json({error:"Internal server error"},500)
     }
- })   
-/*
-
-.get("/wallet",async(c)=>{
+ }) .get("/wallet",async(c)=>{
     try{
 const {userId} = c.get("jwtPayload") as TokenPayload
-let wallet = await c.env.canzo.prepare("SELECT balance FROM wallets WHERE user_id = ?1").bind(userId).first<Wallet>()
+let wallet = await c.env.canzo.prepare("SELECT balance,pending_balance FROM wallets WHERE user_id = ?1").bind(userId).first<Wallet>()
 if (!wallet){
     await c.env.canzo.prepare("INSERT INTO wallets (user_id, balance) VALUES (?1, 0)").bind(userId).run()
      wallet = await c.env.canzo.prepare("SELECT balance FROM wallets WHERE user_id = ?1").bind(userId).first<Wallet>()
@@ -221,7 +255,29 @@ return c.json({wallet})
         console.error(`error while getting wallet ${error}`)
         return c.json({error:"Internal server error",message:error},500)
     }
+}).delete("/basket/:id", async (c) => {
+    try {
+        const { userId } = c.get("jwtPayload") as TokenPayload
+        const basketId = c.req.param("id")
+        
+        const basket = await c.env.canzo.prepare("SELECT is_full FROM baskets WHERE id = ?1 AND client_id = ?2").bind(basketId, userId).first<Basket>()
+        
+        if (!basket) {
+            return c.json({ error: "Basket not found" }, 404)
+        }
+        
+        if (basket.is_full) {
+            return c.json({ message: "Cannot delete a full basket" }, 400)
+        }
+        
+        await c.env.canzo.prepare("DELETE FROM baskets WHERE id = ?1 AND client_id = ?2").bind(basketId, userId).run()
+        
+        return c.json({ message: "Basket deleted successfully" }, 200)
+    } catch (error) {
+        console.error(`error while deleting basket ${error}`)
+        return c.json({ error: "Internal server error" }, 500)
+    }
 })
-*/
+
 export default clientRouter
 

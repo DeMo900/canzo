@@ -244,7 +244,7 @@ export async function rejectWithdrawal(
                      updated_at = datetime('now')
                  WHERE user_id = ?2 AND pending_balance >= ?1`
             )
-            .bind(withdrawal.amount, withdrawal.user_id, withdrawal.amount),
+            .bind(withdrawal.amount, withdrawal.user_id),
     ])
 
     if (results[0].meta.changes === 0) {

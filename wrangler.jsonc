@@ -17,10 +17,6 @@
     }
   ],
 
-  "vars": {
-   
-  },
-
   "kv_namespaces": [
     {
       "binding": "canzo_KV",
