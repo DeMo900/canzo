@@ -265,10 +265,10 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"amount\": 100\n}"
+              "raw": "{\n  \"amount\": 100,\n  \"wallet_number\": \"01234567890\",\n  \"wallet_type\": \"Vodafone Cash\"\n}"
             },
             "url": "{{baseUrl}}/api/client/withdraw",
-            "description": "Locks amount from balance to pending_balance."
+            "description": "wallet_type: Vodafone Cash | Orange Cash | Etisalat Cash | InstaPay"
           }
         },
         {

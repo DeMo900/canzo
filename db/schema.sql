@@ -81,6 +81,12 @@ CREATE TABLE IF NOT EXISTS withdrawal_requests (
     admin_id INTEGER,
     screenshot_path TEXT,
     wallet_number TEXT,
+    wallet_type TEXT CHECK(wallet_type IN (
+        'Vodafone Cash',
+        'Orange Cash',
+        'Etisalat Cash',
+        'InstaPay'
+    )),
     created_at DATETIME DEFAULT (datetime('now')),
     updated_at DATETIME DEFAULT (datetime('now')),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,

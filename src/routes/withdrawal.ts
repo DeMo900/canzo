@@ -64,12 +64,13 @@ clientWithdrawRouter
         async (c) => {
             try {
                 const { userId } = c.get('jwtPayload') as TokenPayload
-                const { amount, wallet_number } = c.req.valid('json')
+                const { amount, wallet_number, wallet_type } = c.req.valid('json')
                 const withdrawalId = await createWithdrawalRequest(
                     c.env.canzo,
                     userId,
                     amount,
-                    wallet_number
+                    wallet_number,
+                    wallet_type
                 )
                 const wallet = await getWallet(c.env.canzo, userId)
                 return c.json(
@@ -94,7 +95,7 @@ clientWithdrawRouter
             const { userId } = c.get('jwtPayload') as TokenPayload
             const withdrawals = await c.env.canzo
                 .prepare(
-                    `SELECT id, user_id, amount, status, admin_id, screenshot_path, wallet_number, created_at, updated_at
+                    `SELECT id, user_id, amount, status, admin_id, screenshot_path, wallet_number, wallet_type, created_at, updated_at
                      FROM withdrawal_requests
                      WHERE user_id = ?1
                      ORDER BY created_at DESC`
@@ -135,7 +136,7 @@ adminWithdrawRouter
                 withdrawals = await c.env.canzo
                     .prepare(
                         `SELECT wr.id, wr.user_id, wr.amount, wr.status, wr.admin_id,
-                                wr.screenshot_path, wr.wallet_number, wr.created_at, wr.updated_at,
+                                wr.screenshot_path, wr.wallet_number, wr.wallet_type, wr.created_at, wr.updated_at,
                                 u.user_name, u.phone_number
                          FROM withdrawal_requests wr
                          JOIN users u ON wr.user_id = u.id
@@ -148,7 +149,7 @@ adminWithdrawRouter
                 withdrawals = await c.env.canzo
                     .prepare(
                         `SELECT wr.id, wr.user_id, wr.amount, wr.status, wr.admin_id,
-                                wr.screenshot_path, wr.wallet_number, wr.created_at, wr.updated_at,
+                                wr.screenshot_path, wr.wallet_number, wr.wallet_type, wr.created_at, wr.updated_at,
                                 u.user_name, u.phone_number
                          FROM withdrawal_requests wr
                          JOIN users u ON wr.user_id = u.id

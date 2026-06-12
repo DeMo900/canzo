@@ -12,6 +12,7 @@ export type WithdrawalRow = {
     admin_id: number | null
     screenshot_path: string | null
     wallet_number: string | null
+    wallet_type: string | null
     created_at: string
     updated_at: string
 }
@@ -79,7 +80,8 @@ export async function createWithdrawalRequest(
     db: D1Database,
     userId: number,
     amount: number,
-    walletNumber: string
+    walletNumber: string,
+    walletType: string
 ): Promise<number> {
     if (amount <= 0) {
         throw new WalletServiceError('INSUFFICIENT_BALANCE', 'Invalid amount')
@@ -120,10 +122,10 @@ export async function createWithdrawalRequest(
 
     const insert = await db
         .prepare(
-            `INSERT INTO withdrawal_requests (user_id, amount, status, wallet_number)
-             VALUES (?1, ?2, 'Pending', ?3)`
+            `INSERT INTO withdrawal_requests (user_id, amount, status, wallet_number, wallet_type)
+             VALUES (?1, ?2, 'Pending', ?3, ?4)`
         )
-        .bind(userId, amount, walletNumber)
+        .bind(userId, amount, walletNumber, walletType)
         .run()
 
     const withdrawalId = insert.meta.last_row_id
