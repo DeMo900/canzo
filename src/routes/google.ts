@@ -28,7 +28,8 @@ googleRouter.post("/setup-profile",
     user_role: string
 }
         const {userId} = c.get("jwtPayload") as TokenPayload
-        const {address,activityType,activityName} = c.req.valid("json")
+        const {address,activityType,activityName,phoneNumber} = c.req.valid("json")
+        await c.env.canzo.prepare("UPDATE users SET phone_number = ?1 WHERE id = ?2").bind(phoneNumber,userId).run();
         await c.env.canzo
         .prepare("INSERT INTO clients (user_id,address,activity_type,activity_name) VALUES (?, ?, ?,?)")
         .bind(userId,address,activityType,activityName)

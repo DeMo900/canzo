@@ -152,26 +152,25 @@ try{
     try {
         const {idToken} = c.req.valid("json")
         const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
+        if (!res.ok) return c.json({ error: "Invalid token"}, 401);
         const googleUser = await res.json<{
             sub: string;
             email: string;
             name: string;
             aud: string;
         }>();
-        if (!res.ok) return c.json({ error: "Invalid token" }, 401);
-
   if (googleUser.aud !== c.env.GOOGLE_CLIENT_ID) {
     return c.json({ error: "Token not intended for this app" }, 401);
   }
    let user = await c.env.canzo
-    .prepare("SELECT * FROM users WHERE google_id = ?")
-    .bind(googleUser.sub)
+    .prepare("SELECT * FROM users WHERE google_id = ? OR email = ?")
+    .bind(googleUser.sub,googleUser.email)
     .first();
 
     if(!user){
     await c.env.canzo
-    .prepare("INSERT INTO users (google_id,user_name, email) VALUES (?, ?, ?)")
-    .bind(googleUser.sub,googleUser.name,googleUser.email)
+    .prepare("INSERT INTO users (google_id,user_name, email,user_role) VALUES (?, ?, ?,?)    ")
+    .bind(googleUser.sub,googleUser.name,googleUser.email,"Client")
     .run();
     
     user = await c.env.canzo
@@ -181,13 +180,13 @@ try{
     }
 const token = await sign({
     userId: user?.id,
-    user_role: user?.user_role,
+    user_role: user?.user_role, 
     
 },c.env.JWT_SECRET!);
 return c.json({token})
     } catch (error) {
         console.log(error)
-        return c.json({ message: "Error" })
+        return c.json({ message:  error },500)
     }
 })
 export default authRouter 
