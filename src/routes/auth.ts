@@ -166,7 +166,7 @@ try{
     .prepare("SELECT * FROM users WHERE google_id = ? OR email = ?")
     .bind(googleUser.sub,googleUser.email)
     .first();
-
+let isFirstLogin = false;
     if(!user){
     await c.env.canzo
     .prepare("INSERT INTO users (google_id,user_name, email,user_role) VALUES (?, ?, ?,?)    ")
@@ -177,13 +177,13 @@ try{
     .prepare("SELECT * FROM users WHERE google_id = ?")
     .bind(googleUser.sub)
     .first();
+    isFirstLogin = true;
     }
 const token = await sign({
     userId: user?.id,
     user_role: user?.user_role, 
-    
 },c.env.JWT_SECRET!);
-return c.json({token})
+return c.json({token,user_role:user?.user_role,isFirstLogin})
     } catch (error) {
         console.log(error)
         return c.json({ message:  error },500)
