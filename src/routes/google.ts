@@ -37,7 +37,11 @@ googleRouter.post("/setup-profile",
         const {userId} = c.get("jwtPayload") as TokenPayload
         const {address,activityType,activityName,phoneNumber} = c.req.valid("json")
         const user = await c.env.canzo.prepare("SELECT phone_number FROM users WHERE id = ?1").bind(userId).first<User>();
+        const checkPhoneNumber = await c.env.canzo.prepare("SELECT * FROM users WHERE phone_number = ?1").bind(phoneNumber).first<User>();
         if(user?.phone_number !== null){
+            return c.json({error:"profile was already setup"},400)
+        }
+        if(checkPhoneNumber){
             return c.json({error:"phone number already exists"},400)
         }
         const client = await c.env.canzo.prepare("SELECT user_id FROM clients WHERE user_id = ?1").bind(userId).first<Client>();
