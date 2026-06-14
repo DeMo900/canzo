@@ -15,6 +15,13 @@ type User = {
     password_hash: string
     user_role: "Client" | "Admin"
 }
+type Client = {
+    id: number
+    user_id: number
+    address: string
+    activity_type: string
+    activity_name: string
+}
 const googleRouter = new Hono<{Bindings:Bindings,Variables:User}>();
 googleRouter.post("/setup-profile",
     zValidator("json",setupProfileSchema,(result,c)=>{
@@ -29,11 +36,19 @@ googleRouter.post("/setup-profile",
 }
         const {userId} = c.get("jwtPayload") as TokenPayload
         const {address,activityType,activityName,phoneNumber} = c.req.valid("json")
-        await c.env.canzo.prepare("UPDATE users SET phone_number = ?1 WHERE id = ?2").bind(phoneNumber,userId).run();
-        await c.env.canzo
-        .prepare("INSERT INTO clients (user_id,address,activity_type,activity_name) VALUES (?, ?, ?,?)")
-        .bind(userId,address,activityType,activityName)
-        .run();
+        const user = await c.env.canzo.prepare("SELECT phone_number FROM users WHERE id = ?1").bind(userId).first<User>();
+        if(user?.phone_number !== null){
+            return c.json({error:"phone number already exists"},400)
+        }
+        const client = await c.env.canzo.prepare("SELECT user_id FROM clients WHERE user_id = ?1").bind(userId).first<Client>();
+        if(client?.user_id !== null){
+            return c.json({error:"client already exists"},400)
+        }
+        await c.env.canzo.batch([
+            c.env.canzo.prepare("UPDATE users SET phone_number = ?1 WHERE id = ?2").bind(phoneNumber,userId),
+            c.env.canzo.prepare("INSERT INTO clients (user_id,address,activity_type,activity_name) VALUES (?, ?, ?,?)")
+            .bind(userId,address,activityType,activityName)
+        ]);
         return c.json({message:"Profile setup successful"})
     } catch (error) {
         console.error(`error while setting up profile ${error}`)
