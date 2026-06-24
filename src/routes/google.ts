@@ -45,11 +45,11 @@ googleRouter.post("/setup-profile",
             return c.json({error:"phone number already exists"},400)
         }
         const client = await c.env.canzo.prepare("SELECT user_id FROM clients WHERE user_id = ?1").bind(userId).first<Client>();
-        if(client?.user_id !== null){
+        if(client?.user_id){
             return c.json({error:"client already exists"},400)
         }
         await c.env.canzo.batch([
-            c.env.canzo.prepare("UPDATE users SET phone_number = ?1 WHERE id = ?2").bind(phoneNumber,userId),
+            c.env.canzo.prepare("UPDATE users SET phone_number = ?1,profile_setup_completed = 1 WHERE id = ?2").bind(phoneNumber,userId),
             c.env.canzo.prepare("INSERT INTO clients (user_id,address,activity_type,activity_name) VALUES (?, ?, ?,?)")
             .bind(userId,address,activityType,activityName)
         ]);

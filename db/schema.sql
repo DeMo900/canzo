@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS users (
     phone_number TEXT UNIQUE,
     password_hash TEXT ,
     user_role TEXT NOT NULL CHECK(user_role IN ('Client','Admin')),
+    profile_setup_completed BOOLEAN DEFAULT 0
     created_at DATETIME DEFAULT (datetime('now')),
     updated_at DATETIME DEFAULT (datetime('now')),
     fcm_token TEXT

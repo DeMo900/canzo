@@ -49,7 +49,7 @@ const user = await c.env.canzo.prepare("SELECT user_name FROM users WHERE email 
     }
 await c.env.canzo.batch([
     c.env.canzo
-.prepare(" INSERT INTO users (user_name, phone_number, email, password_hash, user_role) VALUES (?1, ?2, ?3, ?4, 'Client')")
+.prepare(" INSERT INTO users (user_name, phone_number,email, password_hash, user_role,profile_setup_completed) VALUES (?1, ?2, ?3, ?4, 'Client',1)")
 .bind(username,phoneNumber,email,hashedPassword),
  c.env.canzo.prepare("INSERT INTO clients (user_id, address, activity_type, activity_name) VALUES (last_insert_rowid(), ?1, ?2, ?3)").bind(address,activityType,activityName)
     ])
@@ -166,10 +166,9 @@ try{
     .prepare("SELECT * FROM users WHERE google_id = ? OR email = ?")
     .bind(googleUser.sub,googleUser.email)
     .first();
-let isFirstLogin = false;
     if(!user){
     await c.env.canzo
-    .prepare("INSERT INTO users (google_id,user_name, email,user_role) VALUES (?, ?, ?,?)    ")
+    .prepare("INSERT INTO users (google_id,user_name,email,user_role) VALUES (?, ?, ?,?)")
     .bind(googleUser.sub,googleUser.name,googleUser.email,"Client")
     .run();
     
@@ -177,13 +176,12 @@ let isFirstLogin = false;
     .prepare("SELECT * FROM users WHERE google_id = ?")
     .bind(googleUser.sub)
     .first();
-    isFirstLogin = true;
     }
 const token = await sign({
     userId: user?.id,
     user_role: user?.user_role, 
 },c.env.JWT_SECRET!);
-return c.json({token,user_role:user?.user_role,isFirstLogin})
+return c.json({token,user_role:user?.user_role,profile_setup_completed:user?.profile_setup_completed})
     } catch (error) {
         console.log(error)
         return c.json({ message:  error },500)

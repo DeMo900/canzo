@@ -1,0 +1,1 @@
+ALTER TABLE users ADD COLUMN profile_setup_completed BOOLEAN DEFAULT 0;

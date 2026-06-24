@@ -180,5 +180,19 @@ return c.json({chart:daysSoldPerDay,materialsWeightSoldThisWeek:materialsWeightS
         console.error(`error while getting stats ${error}`)
         return c.json({error:"Internal server error"},500)
     }
+}).delete("/account", async (c) => {
+    try {
+        const { userId } = c.get("jwtPayload") as TokenPayload
+        const results = await c.env.canzo.prepare("DELETE FROM users WHERE id = ?1").bind(userId).run()
+        
+        if (results.meta.changes === 0) {
+            return c.json({ error: "User not found" }, 404)
+        }
+
+        return c.json({ message: "Account deleted successfully" }, 200)
+    } catch (error) {
+        console.error(`error while deleting account ${error}`)
+        return c.json({ error: "Internal server error" }, 500)
+    }
 })
 export default adminRouter
